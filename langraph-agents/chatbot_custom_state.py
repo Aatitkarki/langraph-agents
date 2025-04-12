@@ -1,13 +1,12 @@
 import os
 from typing import Annotated, List, Sequence
+from langchain_openai import ChatOpenAI
 from typing_extensions import TypedDict
 
-from langchain_openai import ChatOpenAI
 from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_core.messages import BaseMessage, AIMessage, ToolMessage
+from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.tools import tool # Import tool decorator if needed for custom tools
 from langchain_core.runnables import RunnableConfig
-import json
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
@@ -56,7 +55,37 @@ def chatbot(state: State):
     # if we only want results from the *current* turn to be stored.
     # Alternatively, manage accumulation if needed.
     state_update = {"search_results": []} # Clear previous results for this example
-    response = llm_with_tools.invoke(state["messages"])
+
+    messages_for_llm = list(state["messages"]) # Create a mutable copy
+    # DIAGNOSTIC: Check if the last message is a ToolMessage and simplify its content
+    # This helps determine if the raw ToolMessage content causes the LLM error
+    if messages_for_llm and isinstance(messages_for_llm[-1], ToolMessage):
+        print("---DIAGNOSTIC: Simplifying ToolMessage content for LLM call---")
+        original_tool_message = messages_for_llm[-1]
+        # Try creating a simplified content string using the search_results from the state
+        try:
+            # Access the search results collected by the wrapper node in the *current* state dictionary
+            # Note: state["search_results"] might be empty here if cleared at the start of chatbot node
+            # We rely on the fact that the ToolMessage was just added in the previous step
+            num_results = len(json.loads(original_tool_message.content)) if isinstance(original_tool_message.content, str) else 0
+            simplified_content = f"Tool '{original_tool_message.name}' executed. Found {num_results} results."
+        except Exception as e:
+            # Fallback if parsing original content fails
+            print(f"Diagnostic fallback: Error processing original ToolMessage content: {e}")
+            simplified_content = f"Tool '{original_tool_message.name}' executed. Results obtained."
+
+        # Create a new ToolMessage with simplified content
+        # Ensure necessary identifiers like tool_call_id are preserved
+        simplified_tool_message = ToolMessage(
+            content=simplified_content,
+            tool_call_id=original_tool_message.tool_call_id,
+            name=original_tool_message.name,
+            # id=getattr(original_tool_message, 'id', None) # Preserve id if exists and needed
+        )
+        messages_for_llm[-1] = simplified_tool_message # Replace the last message in the list for LLM
+
+    # Invoke LLM with the original or potentially simplified message list
+    response = llm_with_tools.invoke(messages_for_llm)
     state_update["messages"] = [response]
     return state_update
 
@@ -108,7 +137,8 @@ def tool_node_wrapper(state: State):
                      current_search_results.append({"raw_content": msg.content})
 
 
-    return {"messages": tool_messages, "search_results": current_search_results}
+    # Return only the state key this wrapper is responsible for updating
+    return {"search_results": current_search_results}
 
 
 graph_builder.add_node("chatbot", chatbot)
@@ -126,7 +156,9 @@ graph_builder.add_edge("tools", "chatbot")
 
 # --- Compile the Graph with Checkpointer ---
 memory = MemorySaver()
-graph = graph_builder.compile(checkpointer=memory)
+graph = graph_builder.compile(checkpointer=memory).with_config({
+    "callbacks": [LANGFUSE_HANDLER],
+})
 
 # --- Interaction Loop ---
 if __name__ == "__main__":
