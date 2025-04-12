@@ -1,43 +1,52 @@
 import json
 import os
-from typing import List, Dict, Any, Optional
-
-# LangGraph and related imports
-from typing_extensions import TypedDict, Annotated
+from typing import List, Dict, Any, Optional, Annotated
 import operator
+
+# --- Environment Setup ---
+# Make sure to create a .env file with your OPENAI_API_KEY
+# or set it as an environment variable.
+from dotenv import load_dotenv
+load_dotenv() 
+
+# --- Langchain / LangGraph Imports ---
+from pydantic import SecretStr
+from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END
-# Assuming we'll use langchain_core tools and potentially an LLM later
-from langchain_core.tools import tool 
-from langgraph.prebuilt import ToolExecutor
-# We might need an LLM later, placeholder import
-# from langchain_openai import ChatOpenAI 
+from langgraph.prebuilt import ToolNode
+from langchain_core.tools import tool
+from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage, AIMessage
+# Use ChatOpenAI for OpenAI or compatible APIs
+from langchain_openai import ChatOpenAI 
 
 # --- Agent State Definition ---
+# We'll primarily use messages to pass information.
+# Other fields can be added if needed for specific tracking.
 class AgentState(TypedDict):
     """
     Represents the state of our graph.
 
     Attributes:
-        query: The initial user query.
-        intent: The determined intent (e.g., 'information', 'action', 'clarify', 'error').
-        tool_name: The name of the tool selected by the agent.
-        tool_input: The input parameters for the selected tool.
-        tool_output: The result returned by the tool execution.
-        response: The final response string to be shown to the user.
-        error: Any error message encountered during processing.
-        # Potentially add message history if needed for conversational context
-        # messages: Annotated[List[AnyMessage], operator.add] 
+        messages: The list of messages exchanged between the user and the agent.
+                  This is the primary way state is passed and managed.
     """
-    query: str
-    intent: Optional[str]
-    tool_name: Optional[str]
-    tool_input: Optional[Dict[str, Any]]
-    tool_output: Optional[Any] 
-    response: Optional[str]
-    error: Optional[str]
+    messages: Annotated[List[BaseMessage], operator.add]
 
+# --- LLM Initialization ---
+# Replace with your model details if not using default OpenAI
+# Ensure OPENAI_API_KEY is set in your environment or .env file
+# You might need to add base_url and api_key for compatible APIs
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_API_BASE = os.getenv("OPENAI_API_BASE","")
+OPENAI_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "")
 
-# Define the path to the mock data directory
+llm = ChatOpenAI(
+    api_key=SecretStr(OPENAI_API_KEY),
+    base_url=OPENAI_API_BASE,
+    model=OPENAI_MODEL_NAME
+) 
+
+# --- Mock Data Setup ---
 MOCK_DATA_DIR = "mock_data"
 DASHBOARD_FILE = os.path.join(MOCK_DATA_DIR, "dashboard_landing.json")
 TRANSACTIONS_FILE = os.path.join(MOCK_DATA_DIR, "account_transactions.json")
@@ -50,31 +59,32 @@ def read_mock_data(file_path: str) -> Dict[str, Any]:
             data = json.load(f)
         if not data.get("IsSucceeded", False):
             print(f"Warning: Data source reported failure for {file_path}: {data.get('ActDescription', 'Unknown error')}")
-            # Return structure consistent with successful reads but indicate potential issue
             return {"ResponseData": data.get("ResponseData", None), "Error": data.get('ActDescription', 'Failed status in data')}
-        return data
+        # Return only the core data if successful
+        return data.get("ResponseData", {}) 
     except FileNotFoundError:
         print(f"Error: Mock data file not found at {file_path}")
-        return {"ResponseData": None, "Error": f"File not found: {file_path}"}
+        return {"Error": f"File not found: {file_path}"}
     except json.JSONDecodeError:
         print(f"Error: Could not decode JSON from {file_path}")
-        return {"ResponseData": None, "Error": f"Invalid JSON in file: {file_path}"}
+        return {"Error": f"Invalid JSON in file: {file_path}"}
     except Exception as e:
         print(f"An unexpected error occurred while reading {file_path}: {e}")
-        return {"ResponseData": None, "Error": f"Unexpected error reading file: {e}"}
+        return {"Error": f"Unexpected error reading file: {e}"}
 
-# --- Tool Implementations will go here ---
+# --- Tool Implementations ---
+# Tools now return the data directly or an error dict
 
 @tool
 def get_dashboard_summary() -> Dict[str, Any]:
     """
-    Retrieves a summary of the dashboard landing data, including account and card lists.
+    Retrieves a summary of the dashboard landing data, including account and card lists. 
+    Use this for general overview requests when no specific account or card is mentioned.
     """
-    data = read_mock_data(DASHBOARD_FILE)
-    if data.get("Error"):
-        return {"error": data["Error"]}
+    response_data = read_mock_data(DASHBOARD_FILE)
+    if response_data.get("Error"):
+        return {"error": response_data["Error"]}
     
-    response_data = data.get("ResponseData", {})
     summary = {
         "accounts": [
             {
@@ -92,8 +102,8 @@ def get_dashboard_summary() -> Dict[str, Any]:
                 "available_balance": card.get("AvailableBalance")
             } for card in response_data.get("Cards", [])
         ],
-        "loans": response_data.get("Loans", []), # Assuming loans structure is simple for now
-        "investments": response_data.get("Investments", []) # Assuming investments structure is simple
+        "loans_count": len(response_data.get("Loans", [])), 
+        "investments_count": len(response_data.get("Investments", [])) 
     }
     return summary
 
@@ -101,15 +111,13 @@ def get_dashboard_summary() -> Dict[str, Any]:
 def get_account_balance(account_no: str) -> Dict[str, Any]:
     """
     Retrieves the available balance for a specific account number.
-    Account number should match the 'AccountNo' field (e.g., '4080201040001').
+    The account number should be the internal number like '4080201040001'.
     """
-    data = read_mock_data(DASHBOARD_FILE)
-    if data.get("Error"):
-        return {"error": data["Error"]}
+    response_data = read_mock_data(DASHBOARD_FILE)
+    if response_data.get("Error"):
+        return {"error": response_data["Error"]}
 
-    response_data = data.get("ResponseData", {})
     accounts = response_data.get("Accounts", [])
-    
     for account in accounts:
         if account.get("AccountNo") == account_no:
             return {
@@ -117,149 +125,144 @@ def get_account_balance(account_no: str) -> Dict[str, Any]:
                 "available_balance": account.get("AvailableBalance"),
                 "currency": account.get("CurrencyCode")
             }
-            
     return {"error": f"Account number '{account_no}' not found."}
 
 @tool
-def get_transaction_history(account_no: Optional[str] = None, limit: int = 10) -> Dict[str, Any]:
+def get_transaction_history(account_no: Optional[str] = None, limit: int = 5) -> Dict[str, Any]:
     """
-    Retrieves transaction history. 
-    Optionally filters by account number (Note: Mock data doesn't link transactions to accounts, so filtering is illustrative).
-    Limits the number of transactions returned.
+    Retrieves recent transaction history. 
+    Optionally filters by account number (NOTE: Mock data currently doesn't support filtering by account_no, so providing it won't filter results).
+    Returns the latest transactions up to the specified limit (default 5).
     """
-    data = read_mock_data(TRANSACTIONS_FILE)
-    if data.get("Error"):
-        return {"error": data["Error"]}
-
-    transactions = data.get("ResponseData", [])
-    
-    # Placeholder for account filtering if data structure supported it
-    # if account_no:
-    #     transactions = [t for t in transactions if t.get("AccountNo") == account_no] 
-        
-    # Apply limit
-    transactions = transactions[:limit]
-
-    if not transactions:
-         # Check if the original data was empty or filtering resulted in empty
-         if not data.get("ResponseData"):
-             return {"message": "No transaction data available."}
+    response_data = read_mock_data(TRANSACTIONS_FILE)
+    if response_data.get("Error"):
+         # Check if the error was file not found vs invalid JSON etc.
+         if "File not found" in response_data["Error"]:
+              return {"message": "Transaction history data is currently unavailable."}
          else:
-             return {"message": f"No transactions found matching the criteria (Account: {account_no})."}
+              return {"error": response_data["Error"]}
 
-    return {"transactions": transactions}
+    # Attempt to slice first, assuming it's a list. Handle TypeError if not.
+    try:
+        # Apply limit (to the latest transactions assuming list is ordered reverse-chronologically)
+        # We assume response_data should be a list here based on mock data structure
+        # Explicitly cast to list for the type checker before slicing
+        limited_transactions = list(response_data)[:limit]
+        # Verify that the result of slicing is indeed a list (it should be)
+        if not isinstance(limited_transactions, list):
+             # This case is unlikely if the slice succeeded but good for robustness
+             raise TypeError("Sliced data is not a list.")
+             
+    except TypeError:
+         # If response_data wasn't a list or slice failed unexpectedly
+         print(f"Error: Expected list for transaction data, got {type(response_data)}")
+         return {"error": "Invalid format received for transaction data."}
+    except Exception as e:
+         # Catch other potential errors during slicing
+         print(f"Error during transaction slicing: {e}")
+         return {"error": f"An unexpected error occurred while processing transactions: {e}"}
+
+    if not limited_transactions:
+         return {"message": "No recent transaction data found."}
+         
+    # Simplify output for LLM
+    formatted_transactions = []
+    for tx in limited_transactions:
+        if isinstance(tx, dict): # Add explicit check here
+            formatted_transactions.append({
+                "date": tx.get("TransactionDate", "N/A")[:10], # Just date part
+                "description": tx.get("Description", "N/A"),
+                "amount": tx.get("DbAmount") if tx.get("Drcr") == "D" else tx.get("CrAmount"),
+                "currency": tx.get("Currency", "N/A"),
+                "type": tx.get("Drcr", "N/A"), # Debit 'D' or Credit 'C'
+                "id": tx.get("DealReference") or tx.get("TransactionSeqNo") # Provide an ID for reference
+            })
+        else:
+            # Handle unexpected item type if necessary, e.g., log a warning
+            print(f"Warning: Skipping unexpected item type in transactions list: {type(tx)}")
+
+    return {"transactions": formatted_transactions}
 
 @tool
 def get_card_details(card_identifier: str) -> Dict[str, Any]:
     """
     Retrieves details for a specific card based on an identifier.
-    Identifier can be the last 4 digits of 'CardNo' or the 'CardSerNo'.
+    The identifier should be the last 4 digits of the card number (e.g., '5884') or the full Card Serial Number (e.g., 'WMcVYNtwPLE1S2gqK1L9Hg==').
     """
-    data = read_mock_data(DASHBOARD_FILE)
-    if data.get("Error"):
-        return {"error": data["Error"]}
+    response_data = read_mock_data(DASHBOARD_FILE)
+    if response_data.get("Error"):
+        return {"error": response_data["Error"]}
 
-    response_data = data.get("ResponseData", {})
     cards = response_data.get("Cards", [])
-    
     for card in cards:
-        # Check last 4 digits (assuming format 'XXXX XXXX XXXX 1234')
-        last_four = card.get("CardNo", "").split(" ")[-1] 
+        last_four = card.get("CardNo", "").split(" ")[-1]
         if card_identifier == last_four or card.get("CardSerNo") == card_identifier:
-            # Return relevant details (adjust as needed)
             return {
                 "name_on_card": card.get("NameOnCard"),
                 "card_no_masked": card.get("CardNo"),
-                "card_serial_no": card.get("CardSerNo"),
                 "type": card.get("CardProductType"),
                 "status": card.get("Status"),
                 "card_limit": card.get("CardLimit"),
                 "available_balance": card.get("AvailableBalance"),
-                "outstanding_balance": card.get("OutstandindBalance"), # Typo in mock data ('OutstandindBalance')
+                "outstanding_balance": card.get("OutstandindBalance"), 
                 "payment_due_date": card.get("PaymentDueDate"),
             }
-            
     return {"error": f"Card with identifier '{card_identifier}' not found."}
 
 @tool
 def get_exchange_rate(currency_code: str) -> Dict[str, Any]:
     """
-    Retrieves the exchange rate for a specific currency code (e.g., 'USD', 'INR').
+    Retrieves the exchange rate for a specific 3-letter currency code (e.g., 'USD', 'INR').
     """
-    data = read_mock_data(EXCHANGE_RATES_FILE)
-    if data.get("Error"):
-        return {"error": data["Error"]}
+    response_data = read_mock_data(EXCHANGE_RATES_FILE)
+    if response_data.get("Error"):
+        return {"error": response_data["Error"]}
 
-    rates = data.get("ResponseData", [])
-    
+    # Ensure response_data is a list before proceeding
+    if not isinstance(response_data, list):
+        return {"error": "Invalid format for exchange rate data."}
+    rates = response_data
     for rate_info in rates:
-        if rate_info.get("Code", "").upper() == currency_code.upper():
+        # Ensure rate_info is a dictionary before using .get
+        if isinstance(rate_info, dict) and rate_info.get("Code", "").upper() == currency_code.upper():
             return {
                 "currency_code": rate_info.get("Code"),
                 "currency_name": rate_info.get("Name"),
-                "rate": rate_info.get("Rate")
+                "rate_to_QAR": rate_info.get("Rate") # Assuming rate is vs QAR based on context
             }
-            
     return {"error": f"Exchange rate for currency code '{currency_code}' not found."}
 
 @tool
 def simulate_cancel_transaction(transaction_id: str) -> Dict[str, Any]:
     """
     Simulates cancelling a transaction identified by its ID (DealReference or TransactionSeqNo).
-    In a real system, this would trigger an API call. Here, it just logs the attempt.
+    Provide the exact transaction ID. This action cannot be undone.
     """
-    data = read_mock_data(TRANSACTIONS_FILE)
-    if data.get("Error"):
-        return {"error": data["Error"]}
-
-    transactions = data.get("ResponseData", [])
-    
-    found = False
-    for tx in transactions:
-        if tx.get("DealReference") == transaction_id or tx.get("TransactionSeqNo") == transaction_id:
-            found = True
-            # In a real scenario, you might check if cancellation is allowed
-            print(f"--- ACTION SIMULATION: Attempting to cancel transaction {transaction_id} ---")
-            # Simulate success
-            return {"success": True, "message": f"Transaction {transaction_id} cancellation request submitted."}
-            
-    if not found:
-        return {"success": False, "error": f"Transaction with ID '{transaction_id}' not found for cancellation."}
-    
-    # Fallback in case logic error occurs (shouldn't happen here)
-    return {"success": False, "error": "An unexpected error occurred during cancellation simulation."}
-
+    # In a real system, this would make an API call. Here, we just log and return success.
+    # We don't need to read the file for simulation.
+    print(f"--- ACTION SIMULATION: Attempting to cancel transaction {transaction_id} ---")
+    # Basic validation of ID format might be useful
+    if not transaction_id or len(transaction_id) < 5: # Arbitrary basic check
+         return {"success": False, "error": f"Invalid transaction ID format provided: '{transaction_id}'."}
+    return {"success": True, "message": f"Transaction {transaction_id} cancellation request submitted successfully."}
 
 @tool
 def simulate_raise_dispute(transaction_id: str, reason: str) -> Dict[str, Any]:
     """
-    Simulates raising a dispute for a transaction identified by its ID (DealReference or TransactionSeqNo).
-    In a real system, this would trigger an API call. Here, it just logs the attempt.
+    Simulates raising a dispute for a specific transaction identified by its ID (DealReference or TransactionSeqNo).
+    Provide the exact transaction ID and a brief reason for the dispute.
     """
-    data = read_mock_data(TRANSACTIONS_FILE)
-    if data.get("Error"):
-        return {"error": data["Error"]}
-
-    transactions = data.get("ResponseData", [])
-    
-    found = False
-    for tx in transactions:
-         if tx.get("DealReference") == transaction_id or tx.get("TransactionSeqNo") == transaction_id:
-            found = True
-            # In a real scenario, you might check if the transaction is eligible for dispute (tx.get("IsEligibleForDispute"))
-            print(f"--- ACTION SIMULATION: Attempting to raise dispute for transaction {transaction_id} ---")
-            print(f"--- Reason: {reason} ---")
-            # Simulate success
-            return {"success": True, "message": f"Dispute submitted for transaction {transaction_id} with reason: '{reason}'."}
-
-    if not found:
-        return {"success": False, "error": f"Transaction with ID '{transaction_id}' not found for raising dispute."}
-        
-    # Fallback
-    return {"success": False, "error": "An unexpected error occurred during dispute simulation."}
-
+    # In a real system, this would make an API call.
+    print(f"--- ACTION SIMULATION: Attempting to raise dispute for transaction {transaction_id} ---")
+    print(f"--- Reason: {reason} ---")
+    if not transaction_id or len(transaction_id) < 5: # Arbitrary basic check
+         return {"success": False, "error": f"Invalid transaction ID format provided: '{transaction_id}'."}
+    if not reason or len(reason) < 5:
+         return {"success": False, "error": "A valid reason must be provided for the dispute."}
+    return {"success": True, "message": f"Dispute submitted for transaction {transaction_id} with reason: '{reason}'. A case number will be assigned shortly."}
 
 # --- Tool Executor Setup ---
+# The tools list now contains the decorated functions
 tools = [
     get_dashboard_summary,
     get_account_balance,
@@ -269,233 +272,46 @@ tools = [
     simulate_cancel_transaction,
     simulate_raise_dispute,
 ]
-tool_executor = ToolExecutor(tools)
+# Bind the tools to the LLM for the supervisor node
+# The supervisor LLM will generate ToolCall messages when it decides to use a tool.
+llm_with_tools = llm.bind_tools(tools)
+# Create the ToolNode that will execute the tools when called by the graph
+tool_node = ToolNode(tools)
 
 # --- Agent Nodes ---
 
-def orchestrator(state: AgentState) -> Dict[str, Any]:
+def supervisor_node(state: AgentState) -> Dict[str, Any]:
     """
-    Determines the intent and selects the appropriate tool or decides to respond directly.
-    (Mock implementation - A real implementation would use an LLM)
+    This node acts as the supervisor. It calls the LLM to decide what to do next.
+    Based on the LLM response, it can either route to the tool executor or end the interaction.
     """
-    print("--- Entering Orchestrator ---")
-    query = state['query'].lower().strip()
-    
-    # --- Handle Meta Queries First ---
-    if query in ["help", "what can you do?", "capabilities"]:
-        print("Intent: Meta - Capabilities Request")
-        capabilities = """
-I am a Finance Bank Agent. I can help you with the following financial tasks:
-- Get a summary of your dashboard (accounts, cards).
-- Check the balance for a specific account.
-- View recent transaction history.
-- Get details for a specific credit card.
-- Find the current exchange rate for a currency.
-- Request cancellation of a transaction (simulated).
-- Raise a dispute for a transaction (simulated).
+    print("--- Entering Supervisor Node ---")
+    # Call the LLM with the current conversation history
+    # The LLM decides whether to call a tool or respond directly to the user.
+    response = llm_with_tools.invoke(state["messages"])
+    print(f"Supervisor LLM Response: {response}")
+    # The response from the LLM (which is an AIMessage) is added to the state.
+    # If it contains tool_calls, the conditional edge will route to the tool executor.
+    # Otherwise, it's considered the final response, and the graph will end.
+    return {"messages": [response]}
 
-Please provide specific details like account numbers, card identifiers (last 4 digits or serial number), transaction IDs, or currency codes when asking questions.
-"""
-        return {"intent": "clarify", "response": capabilities} # Use clarify intent to send direct response
-
-    # --- Simple keyword-based routing for Finance tasks ---
-    if "cancel transaction" in query:
-        # Extract transaction ID (very basic parsing)
-        parts = query.split()
-        tx_id = parts[-1] if len(parts) > 2 else None
-        # Basic check if it looks like an ID (contains digits)
-        if tx_id and any(char.isdigit() for char in tx_id):
-             print(f"Intent: Action - Cancel Transaction (ID: {tx_id})")
-             return {"intent": "action", "tool_name": "simulate_cancel_transaction", "tool_input": {"transaction_id": tx_id}}
-        else:
-             print("Intent: Error - Missing or invalid Transaction ID for cancellation")
-             return {"intent": "error", "error": "Please provide a valid transaction ID to cancel."}
-
-    elif "raise dispute" in query or "dispute transaction" in query:
-         # Extract transaction ID and reason (very basic parsing)
-         parts = query.split()
-         tx_id = None
-         reason = "No reason provided" # Default reason
-         # Look for ID (assuming it's often near the end or after 'transaction')
-         for i, part in enumerate(parts):
-             # Simple check for potential ID (contains digits, maybe starts with 0)
-             if any(char.isdigit() for char in part): 
-                 tx_id = part
-                 # Try to capture reason after ID
-                 if i + 2 < len(parts) and parts[i+1] in ["reason", "for"]:
-                     reason = " ".join(parts[i+2:])
-                 elif i + 1 < len(parts): # Assume reason follows ID if not explicitly stated
-                     reason = " ".join(parts[i+1:])
-                 break
-         if tx_id:
-             print(f"Intent: Action - Raise Dispute (ID: {tx_id}, Reason: {reason})")
-             return {"intent": "action", "tool_name": "simulate_raise_dispute", "tool_input": {"transaction_id": tx_id, "reason": reason}}
-         else:
-             print("Intent: Error - Missing or invalid Transaction ID for dispute")
-             return {"intent": "error", "error": "Please provide a valid transaction ID to dispute."}
-
-    elif "balance" in query:
-        # Extract account number (very basic parsing - assumes format like 'balance for 40...')
-        acc_no = None
-        parts = query.split()
-        for i, part in enumerate(parts):
-            # Simple check for account number format (contains digits, maybe hyphens)
-            cleaned_part = part.replace('-', '')
-            if cleaned_part.isdigit() and len(cleaned_part) > 5: 
-                 acc_no = cleaned_part # Use the internal format
-                 break
-        if acc_no:
-            print(f"Intent: Information - Get Balance (Account: {acc_no})")
-            return {"intent": "information", "tool_name": "get_account_balance", "tool_input": {"account_no": acc_no}}
-        else:
-            # If no specific account, maybe default to summary or ask? For now, assume summary.
-            print("Intent: Information - Get Dashboard Summary (Defaulting due to no specific account in balance query)")
-            return {"intent": "information", "tool_name": "get_dashboard_summary", "tool_input": {}}
-
-    elif "transaction history" in query or "recent transactions" in query:
-        print("Intent: Information - Get Transaction History")
-        # Could add logic here to parse account number or limit if specified in query
-        return {"intent": "information", "tool_name": "get_transaction_history", "tool_input": {}} # Default limit applies
-
-    elif "card details" in query:
-         # Extract card identifier (very basic parsing - assumes last word is identifier)
-         parts = query.split()
-         card_id = parts[-1] if len(parts) > 2 else None
-         # Basic check if it looks like a card identifier (e.g., 4 digits or longer alphanumeric)
-         if card_id and (card_id.isdigit() and len(card_id) == 4 or len(card_id) > 4):
-             print(f"Intent: Information - Get Card Details (Identifier: {card_id})")
-             return {"intent": "information", "tool_name": "get_card_details", "tool_input": {"card_identifier": card_id}}
-         else:
-             print("Intent: Error - Missing or invalid Card Identifier")
-             return {"intent": "error", "error": "Please provide a valid card identifier (last 4 digits or serial number)."}
-
-    elif "exchange rate" in query:
-         # Extract currency code (very basic parsing - assumes code follows 'for')
-         code = None
-         parts = query.split()
-         if "for" in parts:
-             idx = parts.index("for")
-             if idx + 1 < len(parts):
-                 code = parts[idx+1].upper()
-         if code and len(code) == 3 and code.isalpha(): # Check if it's 3 letters
-             print(f"Intent: Information - Get Exchange Rate (Code: {code})")
-             return {"intent": "information", "tool_name": "get_exchange_rate", "tool_input": {"currency_code": code}}
-         else:
-             print("Intent: Error - Missing or invalid Currency Code")
-             return {"intent": "error", "error": "Please provide a valid 3-letter currency code (e.g., USD, INR)."}
-
-    elif "summary" in query or "dashboard" in query:
-        print("Intent: Information - Get Dashboard Summary")
-        return {"intent": "information", "tool_name": "get_dashboard_summary", "tool_input": {}}
-
-    else:
-        # --- Non-Finance Check (Basic) ---
-        # Add keywords that are clearly out of scope
-        non_finance_keywords = ["weather", "news", "recipe", "joke", "translate", "capital of"]
-        if any(keyword in query for keyword in non_finance_keywords):
-            print("Intent: Out of Scope")
-            return {"intent": "clarify", "response": "I am a Finance Bank Agent and can only assist with financial matters related to your accounts, cards, transactions, and exchange rates."}
-        else:
-            # --- Default Clarification ---
-            print("Intent: Unclear / General")
-            # Default to a general response or ask for clarification
-            return {"intent": "clarify", "response": "I'm sorry, I couldn't understand that request. As a Finance Bank Agent, I can help with account balances, transactions, card details, and exchange rates. Could you please rephrase your financial query?"}
-
-
-def execute_tools_node(state: AgentState) -> Dict[str, Any]:
-    """Executes the selected tool."""
-    print(f"--- Executing Tool: {state['tool_name']} ---")
-    tool_name = state.get("tool_name")
-    tool_input = state.get("tool_input", {})
-    
-    if not tool_name:
-        print("Error: No tool name provided for execution.")
-        return {"error": "Internal error: Tool name missing.", "tool_output": None}
-
-    # ToolExecutor expects a dict with 'tool_name' and 'tool_input' keys
-    # Note: LangChain's ToolExecutor might have slightly different invocation patterns
-    # depending on version and specific setup. This assumes a basic direct call.
-    # In more complex scenarios (like with LangChain Expression Language), you might structure this differently.
-    
-    # Find the actual tool function from our list
-    selected_tool = None
-    for t in tools:
-        if t.name == tool_name:
-            selected_tool = t
-            break
-            
-    if not selected_tool:
-         print(f"Error: Tool '{tool_name}' not found in the tool list.")
-         return {"error": f"Internal error: Tool '{tool_name}' not found.", "tool_output": None}
-
-    try:
-        # Directly call the tool function with its arguments
-        output = selected_tool.invoke(tool_input) 
-        print(f"Tool Output: {output}")
-        return {"tool_output": output}
-    except Exception as e:
-        print(f"Error executing tool {tool_name}: {e}")
-        # It might be useful to return the specific exception string
-        return {"error": f"Error during tool execution: {str(e)}", "tool_output": None}
-
-def generate_response_node(state: AgentState) -> Dict[str, Any]:
-    """Generates a final response based on the state."""
-    print("--- Generating Response ---")
-    if state.get("error"):
-        # Prioritize showing errors clearly
-        response = f"An error occurred: {state['error']}"
-    elif state.get("intent") == "clarify":
-        # Handle cases where the orchestrator couldn't understand
-        response = state.get("response", "Could you please clarify your request?")
-    elif state.get("tool_output") is not None:
-        # Format the output from the tool execution
-        output = state['tool_output']
-        if isinstance(output, dict):
-             if output.get("error"):
-                 # If the tool itself returned an error message
-                 response = f"Error from tool: {output['error']}"
-             elif output.get("message"):
-                  # If the tool returned a direct message (e.g., action confirmation, no data found)
-                 response = output["message"]
-             elif output.get("success") is not None: 
-                 # Handle structured success/failure from action tools
-                 response = output.get("message", "Action completed.") if output["success"] else output.get("error", "Action failed.")
-             else:
-                 # Generic formatting for other dictionary outputs (like data retrieval)
-                 # Pretty print the JSON for readability
-                 try:
-                     response = f"Here is the information:\n```json\n{json.dumps(output, indent=2)}\n```"
-                 except TypeError: # Handle non-serializable data if any
-                     response = f"Here is the information: {str(output)}"
-        else:
-             # Fallback for non-dictionary outputs
-             response = str(output) 
-    else:
-        # Fallback if no error and no tool output (should ideally not happen in normal flow)
-        response = "I was unable to process your request or there was no information to return."
-        
-    print(f"Final Response: {response}")
-    return {"response": response}
-
+# We no longer need a custom execute_tools_node, ToolNode handles this.
 
 # --- Conditional Edge Logic ---
 
 def should_continue_edge(state: AgentState) -> str:
-    """Determines the next node to route to based on orchestrator's decision."""
-    print(f"--- Deciding Next Step (Intent: {state.get('intent')}) ---")
-    intent = state.get("intent")
-    
-    if intent == "error" or intent == "clarify":
-        # If orchestrator found an error or needs clarification, go to generate response
-        print("Routing: Orchestrator -> Generate Response")
-        return "generate_response"
-    elif intent == "information" or intent == "action":
-        # If a tool is selected, go execute it
-        print("Routing: Orchestrator -> Execute Tools")
-        return "execute_tools"
+    """
+    Determines the next step based on the last message.
+    If the LLM made tool calls, route to the tool executor. Otherwise, end.
+    """
+    print("--- Deciding Next Step ---")
+    last_message = state["messages"][-1]
+    # Check if the last message is an AIMessage and if it has tool_calls attribute and it's not empty/None
+    if isinstance(last_message, AIMessage) and getattr(last_message, 'tool_calls', None):
+        print("Routing: Supervisor -> ToolNode") # Route to the ToolNode
+        return "execute_tools" # The name we gave the ToolNode in the graph
     else:
-        # If intent is missing or unexpected, end the graph execution
-        print("Routing: Orchestrator -> END (Unexpected Intent or End State)")
+        print("Routing: Supervisor -> END (LLM provided final response or error)")
         return END
 
 # --- Assemble the Graph ---
@@ -503,83 +319,108 @@ print("--- Assembling Graph ---")
 workflow = StateGraph(AgentState)
 
 # Add nodes
-workflow.add_node("orchestrator", orchestrator)
-workflow.add_node("execute_tools", execute_tools_node)
-workflow.add_node("generate_response", generate_response_node)
+workflow.add_node("supervisor", supervisor_node)
+# Use the prebuilt ToolNode instance directly, naming it "execute_tools" in the graph
+workflow.add_node("execute_tools", tool_node)
 
 # Set entry point
-workflow.set_entry_point("orchestrator")
+workflow.set_entry_point("supervisor")
 
 # Add edges
 workflow.add_conditional_edges(
-    "orchestrator",
+    "supervisor",
     should_continue_edge,
     {
         "execute_tools": "execute_tools",
-        "generate_response": "generate_response",
         END: END
     }
 )
-workflow.add_edge("execute_tools", "generate_response") # Always generate response after executing tools
-workflow.add_edge("generate_response", END) # End after generating the response
+# After tools are executed, loop back to the supervisor to decide the next step
+workflow.add_edge("execute_tools", "supervisor") 
 
 # Compile the graph
-app = workflow.compile()
+# Add checkpointer for memory (optional but good for multi-turn)
+# from langgraph.checkpoint.sqlite import SqliteSaver
+# memory = SqliteSaver.from_conn_string(":memory:")
+# app = workflow.compile(checkpointer=memory)
+app = workflow.compile() # Compile without memory for now
+
 print("--- Graph Compiled ---")
+
 
 if __name__ == "__main__":
     print("*"*40)
-    print("Welcome! I am your Finance Bank Agent.")
+    print("Welcome! I am your Commercial Bank Agent.")
     print("How can I assist you with your finances today?")
     print("*"*40)
     
     # Basic test to ensure data loading works (keep this)
     print("\nTesting data loading...")
     dashboard_data = read_mock_data(DASHBOARD_FILE)
-    transactions_data = read_mock_data(TRANSACTIONS_FILE)
+    transactions_data = read_mock_data(TRANSACTIONS_FILE) # Note: read_mock_data now returns {} or {"Error":...}
     rates_data = read_mock_data(EXCHANGE_RATES_FILE)
-    print(f"Dashboard loaded: {'Success' if dashboard_data.get('ResponseData') else 'Failed'}")
-    print(f"Transactions loaded: {'Success' if transactions_data.get('ResponseData') else 'Failed'}")
-    print(f"Rates loaded: {'Success' if rates_data.get('ResponseData') else 'Failed'}")
+
+    # Check if the returned value is a dictionary containing an 'Error' key
+    print(f"Dashboard loaded: {'Success' if not (isinstance(dashboard_data, dict) and 'Error' in dashboard_data) else 'Failed'}")
+    print(f"Transactions loaded: {'Success' if not (isinstance(transactions_data, dict) and 'Error' in transactions_data) else 'Failed'}")
+    print(f"Rates loaded: {'Success' if not (isinstance(rates_data, dict) and 'Error' in rates_data) else 'Failed'}")
     print("-" * 30)
 
     # --- Test Graph Invocation ---
     print("\n--- Testing Graph Execution ---")
 
     test_queries = [
-        "help", # Test capabilities
+        "Hi there!",
+        "What can you do?", 
         "What is my balance for account 4080201040001?",
         "Show recent transactions",
-        "Get card details for 5884", # Last 4 digits
-        "Get card details for WMcVYNtwPLE1S2gqK1L9Hg==", # Serial No
+        "Get card details for 5884", 
         "What is the exchange rate for INR?",
         "Cancel transaction 090325T54843",
         "Dispute transaction 63 because it was wrong",
-        "Cancel transaction", # Should trigger orchestrator error
-        "What is the weather in Doha?", # Should trigger out-of-scope
-        "Tell me a joke", # Should trigger out-of-scope
-        "Show dashboard summary",
-        "gibberish request" # Should trigger unclear
+        "What is the weather in Doha?", 
+        "Show dashboard summary"
     ]
+
+    # Example of running with conversation history (if using checkpointer)
+    # config = {"configurable": {"thread_id": "user-123"}} 
 
     for query in test_queries:
         print(f"\n>>> Testing Query: {query}")
-        initial_state = {"query": query}
+        # Initial state now just contains the user message
+        initial_state = {"messages": [HumanMessage(content=query)]}
         
-        # Using stream to show the flow (optional, good for debugging)
-        print("--- Streaming Events ---")
-        final_state_from_stream = None
-        for event in app.stream(initial_state):
-            for node_name, output in event.items():
-                print(f"Output from node: {node_name}")
-                # print(f"State Update: {output}") # Can be verbose
-                final_state_from_stream = output # Keep track of the last state update
-            print("-" * 10)
-        print("--- End Stream ---")
+        final_state = None
+        print("--- Invoking App ---")
+        # Use invoke for single-turn testing, stream for seeing steps
+        try:
+             # Use invoke for simplicity here, stream is better for debugging complex flows
+             final_state = app.invoke(initial_state) #, config=config) 
+             
+             # Extract the last message as the response
+             if final_state and final_state.get("messages"):
+                 final_response_message = final_state["messages"][-1]
+                 # Check if the last message is from the AI and not a ToolMessage
+                 if isinstance(final_response_message, AIMessage):
+                     final_response = final_response_message.content
+                 elif isinstance(final_response_message, ToolMessage):
+                     # If the last message was a tool message, something might be off
+                     # or the LLM didn't generate a final response after the tool call.
+                     # Look for the last AIMessage instead.
+                     final_response = "Tool executed. Looking for final AI response..."
+                     for msg in reversed(final_state["messages"][:-1]):
+                         if isinstance(msg, AIMessage):
+                             final_response = msg.content
+                             break
+                 else:
+                     final_response = f"Unexpected final message type: {type(final_response_message)}"
+             else:
+                 final_response = "No messages found in final state."
 
-        # Get the final response cleanly after streaming
-        final_response = final_state_from_stream.get('response', 'No response in final state.') if final_state_from_stream else "Streaming failed to produce final state."
-        
+        except Exception as e:
+            print(f"!!! Error invoking graph: {e}")
+            final_response = f"Error during execution: {e}"
+
         print(f"\n>>> Final Response for '{query}':")
         print(final_response)
         print("=" * 30)
