@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List, Dict, Any, Optional, Annotated
+from typing import List, Dict, Any, Optional, Annotated, Union
 import operator
 
 # --- Environment Setup ---
@@ -16,6 +16,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.tools import tool
 from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage, AIMessage
+from langchain_core.runnables import RunnableLambda
 # Use ChatOpenAI for OpenAI or compatible APIs
 from langchain_openai import ChatOpenAI 
 
@@ -70,6 +71,7 @@ def read_mock_data(file_path: str) -> Dict[str, Any]:
         return {"Error": f"Invalid JSON in file: {file_path}"}
     except Exception as e:
         print(f"An unexpected error occurred while reading {file_path}: {e}")
+        return {"Error": f"Unexpected error reading file: {e}"}
         return {"Error": f"Unexpected error reading file: {e}"}
 
 # --- Tool Implementations ---
@@ -128,42 +130,51 @@ def get_account_balance(account_no: str) -> Dict[str, Any]:
     return {"error": f"Account number '{account_no}' not found."}
 
 @tool
-def get_transaction_history(account_no: Optional[str] = None, limit: int = 5) -> Dict[str, Any]:
+def get_transaction_history(account_no: Optional[str], limit: Optional[int]) -> Union[Dict[str, Any], str]:
     """
     Retrieves recent transaction history. 
     Optionally filters by account number (NOTE: Mock data currently doesn't support filtering by account_no, so providing it won't filter results).
-    Returns the latest transactions up to the specified limit (default 5).
+    Returns the latest transactions up to the specified limit (defaults to 5 if not provided).
     """
     response_data = read_mock_data(TRANSACTIONS_FILE)
+    # If read_mock_data returned an error, return empty list
     if response_data.get("Error"):
-         # Check if the error was file not found vs invalid JSON etc.
-         if "File not found" in response_data["Error"]:
-              return {"message": "Transaction history data is currently unavailable."}
-         else:
-              return {"error": response_data["Error"]}
+         print(f"Error reading transaction data: {response_data['Error']}")
+         return "Transaction history data is currently unavailable due to a data source error."
+
+    # Set default limit if not provided by LLM
+    effective_limit = limit if limit is not None else 5
 
     # Attempt to slice first, assuming it's a list. Handle TypeError if not.
     try:
         # Apply limit (to the latest transactions assuming list is ordered reverse-chronologically)
-        # We assume response_data should be a list here based on mock data structure
-        # Explicitly cast to list for the type checker before slicing
-        limited_transactions = list(response_data)[:limit]
+        # Extract the actual list from the 'ResponseData' key
+        actual_data = response_data.get("ResponseData", [])
+        if not isinstance(actual_data, list):
+             raise TypeError(f"Expected list in ResponseData, got {type(actual_data)}")
+        limited_transactions = actual_data[:effective_limit]
         # Verify that the result of slicing is indeed a list (it should be)
         if not isinstance(limited_transactions, list):
              # This case is unlikely if the slice succeeded but good for robustness
              raise TypeError("Sliced data is not a list.")
              
     except TypeError:
-         # If response_data wasn't a list or slice failed unexpectedly
-         print(f"Error: Expected list for transaction data, got {type(response_data)}")
-         return {"error": "Invalid format received for transaction data."}
+         # Return message if data is invalid format after extraction attempt
+         print(f"Error: Expected list for transaction data, got {type(actual_data)}")
+         # Return empty list if data is invalid format after extraction attempt
+         return {"transactions": []}
     except Exception as e:
-         # Catch other potential errors during slicing
-         print(f"Error during transaction slicing: {e}")
-         return {"error": f"An unexpected error occurred while processing transactions: {e}"}
+         # Catch other potential errors during processing
+         print(f"Error processing transaction data: {e}")
+         # Return empty list on error
+         # Return message on other errors
+         # Return empty list on other errors
+         return {"transactions": []}
 
+    # Check if the list is empty after potential slicing
     if not limited_transactions:
-         return {"message": "No recent transaction data found."}
+         # Return message if no transactions found after filtering/limiting
+         return "No recent transaction data found."
          
     # Simplify output for LLM
     formatted_transactions = []
@@ -179,8 +190,10 @@ def get_transaction_history(account_no: Optional[str] = None, limit: int = 5) ->
             })
         else:
             # Handle unexpected item type if necessary, e.g., log a warning
-            print(f"Warning: Skipping unexpected item type in transactions list: {type(tx)}")
+             print(f"Warning: Skipping unexpected item type in transactions list: {type(tx)}")
 
+    # Return the successfully formatted transactions
+    return {"transactions": formatted_transactions}
     return {"transactions": formatted_transactions}
 
 @tool
@@ -210,18 +223,22 @@ def get_card_details(card_identifier: str) -> Dict[str, Any]:
     return {"error": f"Card with identifier '{card_identifier}' not found."}
 
 @tool
-def get_exchange_rate(currency_code: str) -> Dict[str, Any]:
+def get_exchange_rate(currency_code: str) -> Union[Dict[str, Any], str]:
     """
     Retrieves the exchange rate for a specific 3-letter currency code (e.g., 'USD', 'INR').
     """
     response_data = read_mock_data(EXCHANGE_RATES_FILE)
+    # If read_mock_data returned an error, return unavailable message
     if response_data.get("Error"):
-        return {"error": response_data["Error"]}
-
-    # Ensure response_data is a list before proceeding
-    if not isinstance(response_data, list):
-        return {"error": "Invalid format for exchange rate data."}
-    rates = response_data
+        print(f"Error reading exchange rate data: {response_data['Error']}")
+        # Return string message on error
+        return "Exchange rate data is currently unavailable due to a data source error."
+    # Extract the actual list from the 'ResponseData' key
+    rates = response_data.get("ResponseData", [])
+    if not isinstance(rates, list):
+        # Provide a clearer message for the LLM
+        # Return string message on error
+        return "Could not process exchange rate data due to unexpected format."
     for rate_info in rates:
         # Ensure rate_info is a dictionary before using .get
         if isinstance(rate_info, dict) and rate_info.get("Code", "").upper() == currency_code.upper():
@@ -230,7 +247,9 @@ def get_exchange_rate(currency_code: str) -> Dict[str, Any]:
                 "currency_name": rate_info.get("Name"),
                 "rate_to_QAR": rate_info.get("Rate") # Assuming rate is vs QAR based on context
             }
-    return {"error": f"Exchange rate for currency code '{currency_code}' not found."}
+    # Return unavailable message if currency code not found in the loop
+    # Return string message if currency code not found in the loop
+    return f"Exchange rate not available for the specified currency '{currency_code}'."
 
 @tool
 def simulate_cancel_transaction(transaction_id: str) -> Dict[str, Any]:
@@ -256,7 +275,8 @@ def simulate_raise_dispute(transaction_id: str, reason: str) -> Dict[str, Any]:
     print(f"--- ACTION SIMULATION: Attempting to raise dispute for transaction {transaction_id} ---")
     print(f"--- Reason: {reason} ---")
     if not transaction_id or len(transaction_id) < 5: # Arbitrary basic check
-         return {"success": False, "error": f"Invalid transaction ID format provided: '{transaction_id}'."}
+         # Make error clearer for LLM
+         return {"success": False, "error": f"Tool validation failed: Invalid transaction ID format provided ('{transaction_id}'). Please provide a valid ID."}
     if not reason or len(reason) < 5:
          return {"success": False, "error": "A valid reason must be provided for the dispute."}
     return {"success": True, "message": f"Dispute submitted for transaction {transaction_id} with reason: '{reason}'. A case number will be assigned shortly."}
@@ -275,8 +295,44 @@ tools = [
 # Bind the tools to the LLM for the supervisor node
 # The supervisor LLM will generate ToolCall messages when it decides to use a tool.
 llm_with_tools = llm.bind_tools(tools)
+# --- Tool Error Handling ---
+def handle_tool_error(state: AgentState) -> dict:
+    """Handles errors during tool execution by returning a ToolMessage."""
+    error = state.get("error")
+    last_message = state["messages"][-1]
+    # Ensure the last message is an AIMessage and has tool_calls
+    tool_calls = []
+    if isinstance(last_message, AIMessage) and getattr(last_message, 'tool_calls', None):
+        tool_calls = last_message.tool_calls
+
+    # If there are tool calls, attribute error to them. Otherwise, return a general error message.
+    if tool_calls:
+        return {
+            "messages": [
+                ToolMessage(
+                    content=f"Error executing tool: {repr(error)}\nPlease review your input and try again.",
+                    tool_call_id=tc["id"],
+                )
+                for tc in tool_calls
+            ]
+        }
+    else:
+        # No tool calls associated with the error, return a general error message
+        return {
+            "messages": [
+                AIMessage(content=f"An error occurred: {repr(error)}")
+            ]
+        }
+
+# --- Tool Executor Setup ---
+# Bind the tools to the LLM for the supervisor node
+# The supervisor LLM will generate ToolCall messages when it decides to use a tool.
+llm_with_tools = llm.bind_tools(tools)
 # Create the ToolNode that will execute the tools when called by the graph
-tool_node = ToolNode(tools)
+# Add fallback for error handling
+tool_node = ToolNode(tools).with_fallbacks(
+    [RunnableLambda(handle_tool_error)], exception_key="error"
+)
 
 # --- Agent Nodes ---
 
@@ -284,6 +340,7 @@ def supervisor_node(state: AgentState) -> Dict[str, Any]:
     """
     This node acts as the supervisor. It calls the LLM to decide what to do next.
     Based on the LLM response, it can either route to the tool executor or end the interaction.
+    If a tool returns a string, it means the tool encountered a problem and the string contains a message to relay to the user.
     """
     print("--- Entering Supervisor Node ---")
     # Call the LLM with the current conversation history
