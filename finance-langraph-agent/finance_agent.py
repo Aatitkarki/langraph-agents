@@ -72,7 +72,6 @@ def read_mock_data(file_path: str) -> Dict[str, Any]:
     except Exception as e:
         print(f"An unexpected error occurred while reading {file_path}: {e}")
         return {"Error": f"Unexpected error reading file: {e}"}
-        return {"Error": f"Unexpected error reading file: {e}"}
 
 # --- Tool Implementations ---
 # Tools now return the data directly or an error dict
