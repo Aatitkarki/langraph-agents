@@ -1,7 +1,5 @@
-import argparse
 
 import traceback
-import uuid
 from typing import Optional
 
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
@@ -70,23 +68,3 @@ def run_finance_query(query: str, thread_id: str, openai_api_key: Optional[str] 
 
 # Example queries are removed as this file is meant to be imported as a module.
 # Testing should be done via the Streamlit app or separate test scripts.
-
-
-if __name__ == "__main__":
-    # --- CLI Execution --- 
-    parser = argparse.ArgumentParser(description='Run the finance agent with a query.')
-    parser.add_argument('query', type=str, help='The financial query to ask the agent.')
-    args = parser.parse_args()
-
-    # Generate a unique thread ID for this CLI run
-    cli_thread_id = f"cli_thread_{uuid.uuid4()}"
-
-    print(f"Running query from CLI: '{args.query}' with Thread ID: {cli_thread_id}")
-    
-    # Execute the query using the refactored function
-    # Note: Assumes OPENAI_API_KEY is set in the environment or .env file
-    final_response = run_finance_query(query=args.query, thread_id=cli_thread_id)
-    
-    print("\n--- Agent Final Response ---")
-    print(final_response)
-    print("---------------------------")

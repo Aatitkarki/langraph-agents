@@ -1,6 +1,5 @@
 import streamlit as st
 import uuid
-from openai import OpenAI # Keep OpenAI import for potential direct use or consistency
 # Import the core agent execution function and API key constant from the new structure
 from src.main import run_finance_query
 from src.utils.llm_config import OPENAI_API_KEY # API Key loaded from env vars

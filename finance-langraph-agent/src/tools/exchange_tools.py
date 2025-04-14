@@ -30,4 +30,5 @@ def get_exchange_rates(currency_codes: Annotated[Optional[List[str]], "Optional 
                 requested_rates.append(code_map[code])
             else:
                 requested_rates.append({"Code": code, "Error": "Rate not found"})
+        print(f"---Tool: get_exchange_rates returning requested rates: {requested_rates}---")
         return requested_rates
