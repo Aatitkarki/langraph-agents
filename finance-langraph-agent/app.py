@@ -11,7 +11,12 @@ setup_logging()
 
 cli_thread_id = f"cli_thread_{uuid.uuid4()}"
 
-query = "What is the current exchange rate for USD to EUR?"
+# query = "What is the current exchange rate for 1 USD to QAR?" # 3.65
+# query = "What is the current exchange rate for 1 GBP to QAR?" # 4.8747
+# query = "What is the current exchange rate for 1 EUR to QAR?" 
+query = "How much is 365 QAR in european currency?" 
+# query = "How much is 1 GBP in QAR?" 
+
 
 final_response = run_finance_query(query=query, thread_id=cli_thread_id)
 
