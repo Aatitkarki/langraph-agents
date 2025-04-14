@@ -2,7 +2,7 @@ import logging
 from typing import List, Dict
 from langchain_core.tools import tool
 
-# Import the mock data loaded in data_loader
+# Import the dashboard data loaded in data_loader
 from src.utils.data_loader import dashboard_data
 
 # Get a logger instance
@@ -11,10 +11,10 @@ logger = logging.getLogger(__name__)
 @tool
 def get_cards_details() -> List[Dict]:
     """
-    Fetches details for all user credit and potentially other cards from pre-loaded mock data.
+    Fetches details for all user credit and potentially other cards from pre-loaded JSON data.
 
     This tool retrieves comprehensive information about the user's cards available in the
-    mock dashboard dataset.
+    pre-loaded dashboard dataset.
 
     Returns:
         A list of dictionaries, where each dictionary contains details for one card.
@@ -26,7 +26,7 @@ def get_cards_details() -> List[Dict]:
           Example: [{'Error': 'No card data available.'}]
     """
     logger.info("Tool: get_cards_details called")
-    # Access the pre-loaded mock data
+    # Access the pre-loaded JSON data
     data = dashboard_data.get("ResponseData", {}).get("Cards", [])
     if not data:
          error_msg = "No card data available."

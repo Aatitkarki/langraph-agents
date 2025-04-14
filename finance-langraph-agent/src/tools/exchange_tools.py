@@ -2,7 +2,7 @@ import logging
 from typing import Annotated, List, Optional, Dict
 from langchain_core.tools import tool
 
-# Import the mock data loaded in data_loader
+# Import the exchange rate data loaded in data_loader
 from src.utils.data_loader import exchange_rates_data
 
 # Get a logger instance
@@ -14,7 +14,7 @@ def get_exchange_rates(currency_codes: Annotated[Optional[List[str]], "Optional 
     Fetches foreign exchange (FX) rates relative to Qatari Riyal (QAR).
 
     This tool retrieves how many QAR are equivalent to one unit of a specified foreign currency,
-    using pre-loaded mock exchange rate data.
+    using pre-loaded exchange rate data.
 
     Args:
         currency_codes: An optional list of 3-letter ISO currency codes (e.g., ['USD', 'EUR']).
@@ -29,7 +29,7 @@ def get_exchange_rates(currency_codes: Annotated[Optional[List[str]], "Optional 
           Example: {'Code': 'XYZ', 'Error': 'Rate not found'}
     """
     logger.info(f"Tool: get_exchange_rates called (Codes: {currency_codes})")
-    # Access the pre-loaded mock data
+    # Access the pre-loaded JSON data
     all_rates = exchange_rates_data.get("ResponseData", [])
     if not all_rates:
         return [{"Error": "Exchange rate data not available."}]
