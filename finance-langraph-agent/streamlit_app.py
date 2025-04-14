@@ -1,25 +1,26 @@
 import streamlit as st
 import uuid
 from openai import OpenAI # Keep OpenAI import for potential direct use or consistency
-# Import the core agent execution function from your banking_agent file
-from banking_agent import run_finance_query, OPENAI_API_KEY # Assuming OPENAI_API_KEY is handled similarly
+# Import the core agent execution function and API key constant from the new structure
+from src.main import run_finance_query
+from src.utils.llm_config import OPENAI_API_KEY # API Key loaded from env vars
 
 # --- Streamlit Page Configuration ---
 st.set_page_config(page_title="Banking Agent Chatbot", page_icon="💰")
 
 # --- Sidebar for API Key ---
 with st.sidebar:
-    # Use the OPENAI_API_KEY from banking_agent if available, otherwise prompt
+    # Use the OPENAI_API_KEY from src.utils.llm_config (env var) if available, otherwise prompt
     st.session_state.openai_api_key = st.text_input(
         "OpenAI API Key",
         key="chatbot_api_key",
         type="password",
-        value=OPENAI_API_KEY or "" # Pre-fill if found in env
+        value=OPENAI_API_KEY or "" # Pre-fill if found in env (from src.utils.llm_config)
     )
-    if not st.session_state.openai_api_key and not OPENAI_API_KEY:
+    if not st.session_state.openai_api_key and not OPENAI_API_KEY: # Check against key from src.utils.llm_config
         st.warning("Please enter your OpenAI API Key to use the chatbot.")
-    elif not st.session_state.openai_api_key and OPENAI_API_KEY:
-         st.session_state.openai_api_key = OPENAI_API_KEY # Use env var if user clears input
+    elif not st.session_state.openai_api_key and OPENAI_API_KEY: # Check against key from src.utils.llm_config
+         st.session_state.openai_api_key = OPENAI_API_KEY # Use env var (from src.utils.llm_config) if user clears input
          st.info("Using API Key from environment variables.")
 
     st.markdown("[Get an OpenAI API key](https://platform.openai.com/account/api-keys)")
