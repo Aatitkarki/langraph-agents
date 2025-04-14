@@ -1,4 +1,4 @@
-from typing import Literal, Type
+from typing import Callable, Literal, Type
 from pydantic import BaseModel, create_model, ConfigDict
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -9,7 +9,7 @@ from langgraph.types import Command
 # Import the shared state definition
 from .state import FinancialAgentState
 
-def create_supervisor_finance(llm: BaseChatModel, members: list[str]):
+def create_supervisor_finance(llm: BaseChatModel, members: list[str])-> Callable[..., Command[str]]:
     """Creates a supervisor node function for routing between financial agents."""
     options = ["FINISH"] + members
     system_prompt = (
@@ -40,8 +40,9 @@ def create_supervisor_finance(llm: BaseChatModel, members: list[str]):
         """Routes work to the appropriate worker or finishes."""
         print("---Supervisor Running---")
         # Supervisor decides based on the conversation history
-        # Filter out tool messages for brevity if needed for the supervisor LLM call
-        supervisor_input_messages = [m for m in state['messages'] if not isinstance(m, ToolMessage)]
+        # # Filter out tool messages for brevity if needed for the supervisor LLM call
+        # supervisor_input_messages = [m for m in state['messages'] if not isinstance(m, ToolMessage)]
+        supervisor_input_messages = state['messages']
         supervisor_input_messages = [HumanMessage(content=system_prompt)] + supervisor_input_messages
 
         response = supervisor_chain.invoke(supervisor_input_messages)
