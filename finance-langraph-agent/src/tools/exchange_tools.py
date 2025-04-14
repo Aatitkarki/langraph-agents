@@ -17,18 +17,30 @@ def get_exchange_rates(currency_codes: Annotated[Optional[List[str]], "Optional 
     if not all_rates:
         return [{"Error": "Exchange rate data not available."}]
 
+    # Create a map of uppercase code to filtered rate data
+    code_map = {
+        rate['Code'].upper(): {
+            "Code": rate.get("Code"),
+            "Name": rate.get("Name"),
+            "Rate": rate.get("Rate")
+        }
+        for rate in all_rates
+    }
+
     if not currency_codes:
-        # Return all rates if no specific codes are requested
-        return all_rates
+        # Return all filtered rates if no specific codes are requested
+        result = list(code_map.values())
+        print(f"---Tool: get_exchange_rates returning all rates: {result}---")
+        return result
     else:
-        # Filter for requested codes
+        # Filter for requested codes using the map
         requested_rates = []
-        code_map = {rate['Code'].upper(): rate for rate in all_rates}
         codes_to_check = [code.upper() for code in currency_codes]
         for code in codes_to_check:
             if code in code_map:
                 requested_rates.append(code_map[code])
             else:
+                # Note: Error message doesn't contain Name/Rate as they weren't found
                 requested_rates.append({"Code": code, "Error": "Rate not found"})
         print(f"---Tool: get_exchange_rates returning requested rates: {requested_rates}---")
         return requested_rates
