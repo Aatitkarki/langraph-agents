@@ -5,7 +5,7 @@ from .account_tools import get_account_summary
 from .transaction_tools import get_transactions
 from .card_tools import get_credit_card_details
 from .exchange_tools import get_exchange_rates
-from .calculation_tools import python_repl_tool_finance
+from .calculation_tools import basic_calculator
 
 # Define a list of all tools for easy import in agent definitions
 all_tools = [
@@ -13,5 +13,5 @@ all_tools = [
     get_transactions,
     get_credit_card_details,
     get_exchange_rates,
-    python_repl_tool_finance,
+    basic_calculator,
 ]

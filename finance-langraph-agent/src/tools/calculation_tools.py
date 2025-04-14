@@ -1,22 +1,52 @@
-from typing import Annotated
+import operator
+from typing import Annotated, Union
 from langchain_core.tools import tool
-from langchain_experimental.utilities import PythonREPL
 
-# Python REPL Tool (for calculations like currency conversion)
-repl = PythonREPL()
+# Define supported operators
+_OPERATORS = {
+    "+": operator.add,
+    "-": operator.sub,
+    "*": operator.mul,
+    "/": operator.truediv,
+}
 
 @tool
-def python_repl_tool_finance(
-    code: Annotated[str, "The python code to execute for calculations like currency conversion."],
-):
-    """Use this to execute python code for financial calculations.
-       Make sure to use the provided exchange rates if needed by fetching them first.
-       If you want to see the output of a value, print it out with `print(...)`.
-       This is visible to the user. Wrap the final result in the print() statement.
+def basic_calculator(
+    expression: Annotated[str, "A simple arithmetic expression. Examples: '10 + 5', '100 * 2.5', '50 / 2', '7 - 3'"]
+) -> Union[float, str]:
     """
-    print(f"---Tool: python_repl_tool_finance executing code:\n{code}\n---")
+    Performs basic arithmetic calculations (addition, subtraction, multiplication, division).
+
+    Args:
+        expression: A string containing two numbers and one operator (+, -, *, /), separated by spaces.
+                    Example: "15.5 * 3"
+
+    Returns:
+        The result of the calculation as a float, or an error message string if the input is invalid.
+    """
+    print(f"---Tool: basic_calculator executing expression: {expression}---")
     try:
-        result = repl.run(code)
-    except BaseException as e:
-        return f"Failed to execute code. Error: {repr(e)}"
-    return f"Successfully executed:\n```python\n{code}\n```\nStdout: {result}"
+        parts = expression.split()
+        if len(parts) != 3:
+            return "Error: Invalid expression format. Use 'number operator number' (e.g., '10 + 5')."
+
+        num1_str, op_str, num2_str = parts
+
+        try:
+            num1 = float(num1_str)
+            num2 = float(num2_str)
+        except ValueError:
+            return "Error: Invalid numbers in expression."
+
+        if op_str not in _OPERATORS:
+            return f"Error: Unsupported operator '{op_str}'. Use one of: {', '.join(_OPERATORS.keys())}"
+
+        if op_str == "/" and num2 == 0:
+            return "Error: Division by zero."
+
+        calculate = _OPERATORS[op_str]
+        result = calculate(num1, num2)
+        return float(result)
+
+    except Exception as e:
+        return f"An unexpected error occurred: {repr(e)}"
