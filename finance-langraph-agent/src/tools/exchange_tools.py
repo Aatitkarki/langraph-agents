@@ -7,9 +7,22 @@ from src.utils.data_loader import exchange_rates_data
 @tool
 def get_exchange_rates(currency_codes: Annotated[Optional[List[str]], "Optional list of currency codes (e.g., ['USD', 'EUR']) to retrieve rates for."]) -> List[Dict]:
     """
-    Retrieves foreign exchange rates relative to QAR.
-    If no codes are provided, returns all available rates.
-    Each rate indicates how many QAR 1 unit of the foreign currency is worth (e.g., {'Code': 'USD', 'Rate': 3.65} means 1 USD = 3.65 QAR).
+    Fetches foreign exchange (FX) rates relative to Qatari Riyal (QAR).
+
+    This tool retrieves how many QAR are equivalent to one unit of a specified foreign currency,
+    using pre-loaded mock exchange rate data.
+
+    Args:
+        currency_codes: An optional list of 3-letter ISO currency codes (e.g., ['USD', 'EUR']).
+                        If provided, fetches rates only for these specific currencies.
+                        If omitted or an empty list is passed, fetches rates for all available currencies.
+
+    Returns:
+        A list of dictionaries, where each dictionary contains the exchange rate information for one currency.
+        - On success: {'Code': str, 'Name': str, 'Rate': float}
+          Example: {'Code': 'USD', 'Name': 'US Dollar', 'Rate': 3.65} signifies that 1 US Dollar equals 3.65 Qatari Riyal.
+        - If a requested code is not found: {'Code': str, 'Error': 'Rate not found'}
+          Example: {'Code': 'XYZ', 'Error': 'Rate not found'}
     """
     print(f"---Tool: get_exchange_rates called (Codes: {currency_codes})---")
     # Access the pre-loaded mock data
