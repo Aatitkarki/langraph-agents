@@ -1,5 +1,6 @@
 import streamlit as st
 import uuid
+import asyncio # Add asyncio
 # Import the core agent execution function and API key constant from the new structure
 from src.main import run_finance_query
 from src.utils.llm_config import OPENAI_API_KEY # API Key loaded from env vars
@@ -53,23 +54,44 @@ if prompt := st.chat_input("What would you like to ask?"):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Display thinking indicator
+    # Display assistant response with streaming
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            # Call the banking agent function
-            try:
-                response = run_finance_query(
+        # Use st.write_stream which handles async generators
+        try:
+            # Define the async generator function to pass to write_stream
+            # This wrapper is needed because write_stream expects the generator directly
+            async def stream_response():
+                full_response = ""
+                assert prompt is not None # Assure type checker prompt is a string here
+                async for chunk in run_finance_query(
                     query=prompt,
                     thread_id=st.session_state.thread_id,
-                    openai_api_key=st.session_state.openai_api_key # Pass the key
-                )
-                msg_content = response
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
-                msg_content = "Sorry, I encountered an error. Please try again."
+                    openai_api_key=st.session_state.openai_api_key
+                ):
+                    yield chunk # Yield each part to Streamlit for display
+                    full_response += chunk # Accumulate the full response
 
-            # Display assistant response
-            st.markdown(msg_content)
+                # Store the complete message in session state *after* the stream finishes
+                # We need to find a way to get this back out or store it differently.
+                # Let's store it temporarily and add it after the stream.
+                st.session_state.temp_full_response = full_response
 
-    # Add assistant response to chat history
-    st.session_state.messages.append({"role": "assistant", "content": msg_content})
+
+            # Run the stream and display it
+            st.session_state.temp_full_response = None # Reset before stream
+            st.write_stream(stream_response)
+
+            # Retrieve the full response stored by the wrapper and add to history
+            if st.session_state.temp_full_response:
+                 st.session_state.messages.append({"role": "assistant", "content": st.session_state.temp_full_response})
+                 del st.session_state.temp_full_response # Clean up temp storage
+            else:
+                 # Handle cases where the stream might have ended abruptly or with error message already yielded
+                 # Check the last message added by the stream itself if needed
+                 if not st.session_state.messages[-1]["content"].startswith("An error occurred"):
+                     st.session_state.messages.append({"role": "assistant", "content": "Processing complete."}) # Fallback message
+
+
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+            st.session_state.messages.append({"role": "assistant", "content": f"Sorry, I encountered an error: {e}"})

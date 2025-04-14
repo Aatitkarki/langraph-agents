@@ -27,14 +27,8 @@ def create_supervisor_finance(llm: BaseChatModel, members: list[str])-> Callable
         "Do not add any other explanation to your final output."
     )
 
-    # Dynamically create the Pydantic model for the router
-    Router: Type[BaseModel] = create_model(
-        'Router',
-        next=(Literal[tuple(options)], ...)
-        # Config removed as title/description might not be needed for with_structured_output here
-    )
-
-    supervisor_chain = llm.with_structured_output(Router, include_raw=False)
+    # No Router model needed, we'll parse the raw string output
+    supervisor_chain = llm # Use the base LLM directly
 
     def supervisor_node(state: FinancialAgentState) -> Command[str]:
         """Routes work to the appropriate worker or finishes."""
@@ -45,20 +39,23 @@ def create_supervisor_finance(llm: BaseChatModel, members: list[str])-> Callable
         supervisor_input_messages = state['messages']
         supervisor_input_messages = [HumanMessage(content=system_prompt)] + supervisor_input_messages
 
-        response = supervisor_chain.invoke(supervisor_input_messages)
-
-        # Explicitly check the type before accessing the attribute
-        if isinstance(response, Router):
-            next_worker = getattr(response, 'next', 'FINISH') # Use getattr as a fallback access method
+        # Invoke the base LLM and get the raw content
+        response_msg = supervisor_chain.invoke(supervisor_input_messages)
+        # Ensure response_msg has content attribute (should be AIMessage)
+        if hasattr(response_msg, 'content') and isinstance(response_msg.content, str):
+             raw_response = response_msg.content.strip()
+             print(f"---Supervisor Raw Response: '{raw_response}'---")
         else:
-            # Fallback if the response is not the expected Pydantic model
-            print(f"Warning: Supervisor response type unexpected. Type: {type(response)}, Value: {response}")
-            # Attempt dictionary access or default to FINISH
-            try:
-                next_worker = response.get("next", "FINISH") if isinstance(response, dict) else "FINISH"
-            except Exception:
-                 print("Error: Could not determine next worker from supervisor response.")
-                 next_worker = "FINISH" # Default to FINISH on error
+             print(f"Warning: Supervisor response unexpected format. Type: {type(response_msg)}, Value: {response_msg}")
+             raw_response = "FINISH" # Default to FINISH on unexpected format
+
+        # Check if the raw response is one of the valid options
+        if raw_response in options:
+            next_worker = raw_response
+        else:
+            # Fallback if the response is not exactly one of the options
+            print(f"Warning: Supervisor response '{raw_response}' not in valid options {options}. Defaulting to FINISH.")
+            next_worker = "FINISH"
         print(f"---Supervisor Decision: Route to {next_worker}---")
         if next_worker == "FINISH":
             return Command(goto=END, update={"next": None})
