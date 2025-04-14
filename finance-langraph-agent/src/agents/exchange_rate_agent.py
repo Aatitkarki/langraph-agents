@@ -3,13 +3,13 @@ from langgraph.prebuilt import create_react_agent
 # Import necessary components from other modules
 from src.utils.llm_config import llm
 from src.tools.exchange_tools import get_exchange_rates
-from src.tools.calculation_tools import python_repl_tool_finance
+from src.tools.calculation_tools import basic_calculator
 from .prompts import finance_agent_system_prompt
 
 # Define the Exchange Rate & Calculation Agent
 exchange_rate_agent = create_react_agent(
     llm,
-    tools=[get_exchange_rates, python_repl_tool_finance],
+    tools=[get_exchange_rates, basic_calculator],
     prompt=finance_agent_system_prompt(
         "Retrieve exchange rates and perform currency conversions or other simple calculations using the python tool. "
         "All available rates are relative to QAR (e.g., 1 Foreign Currency = X QAR). "
