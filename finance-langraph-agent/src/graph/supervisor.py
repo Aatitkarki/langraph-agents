@@ -3,7 +3,7 @@ from typing import Callable, Literal, Type
 from pydantic import BaseModel, create_model
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, AIMessage
 from langgraph.graph import END
 from langgraph.types import Command
 
@@ -46,13 +46,14 @@ def create_supervisor_finance(llm: BaseChatModel, members: list[str])-> Callable
         "3. **If the latest message is from the user:** Determine which specialist is best suited to handle the newest request based on their capabilities. Route to that specialist.\n"
         "4. **General Queries:** If the user asks a general question about capabilities (like 'what can you do?'), respond with 'FINISH' but first provide a brief summary of the available specialists and their functions in your reasoning process (this summary won't be shown to the user, but helps guide your decision). \n"
         "5. **Completion:** If the query has been fully resolved by the history, or if no specialist can address the remaining request, respond with 'FINISH'.\n\n"
-        f"**Output Format:** Respond ONLY with the 'FINISH' or name of the single next specialist agent ({', '.join([f'{m}' for m in members])}). Do not add any other explanation or text to your final output."
+        f"**Output Format:** Respond with a JSON object containing two fields: 'next' (the name of the single next specialist agent ({', '.join([f'{m}' for m in members])}) or 'FINISH') and 'message'. If 'next' is 'FINISH', the 'message' should be the final response to the user summarizing the outcome. If 'next' is an agent, the 'message' should be a brief summary of the current state or reasoning for routing."
     )
 
     # Dynamically create the Pydantic model for the router
     Router: Type[BaseModel] = create_model(
         'Router',
-        next=(Literal[tuple(options)], ...)
+        next=(Literal[tuple(options)], ...),
+        message=(str, ...) # Renamed summary to message
         # Config removed as title/description might not be needed for with_structured_output here
     )
 
@@ -71,20 +72,34 @@ def create_supervisor_finance(llm: BaseChatModel, members: list[str])-> Callable
         response = supervisor_chain.invoke(supervisor_input_messages)
         logger.debug(f"response from llm: {response}")
 
+        message = "No message provided." # Default message
+        next_worker = "FINISH" # Default next worker
+
         # Explicitly check the type before accessing the attribute
         if isinstance(response, Router):
             next_worker = getattr(response, 'next', 'FINISH') # Use getattr as a fallback access method
+            message = getattr(response, 'message', message) # Extract message
         else:
             # Fallback if the response is not the expected Pydantic model
             logger.warning(f"Supervisor response type unexpected. Type: {type(response)}, Value: {response}")
             # Attempt dictionary access or default to FINISH
             try:
-                next_worker = response.get("next", "FINISH") if isinstance(response, dict) else "FINISH"
+                if isinstance(response, dict):
+                    next_worker = response.get("next", "FINISH")
+                    message = response.get("message", message)
+                else:
+                     next_worker = "FINISH"
             except Exception:
-                 print("Error: Could not determine next worker from supervisor response.")
+                 print("Error: Could not determine next worker or message from supervisor response.")
                  next_worker = "FINISH" # Default to FINISH on error
+
+        logger.info(f"---Supervisor Message/Reasoning: {message}---") # Log the message/reasoning
         logger.info(f"---Supervisor Decision: Route to {next_worker}---")
         if next_worker == "FINISH":
+            # Add the final message to the state before finishing
+            final_message = AIMessage(content=message)
+            # The message history should remain untouched, preserving the last agent's response.
+            # The supervisor's 'message' is logged for reasoning but not added to the final state.
             return Command(goto=END, update={"next": None})
         else:
             # Ensure the chosen worker is actually in the members list before routing

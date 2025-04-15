@@ -14,10 +14,14 @@ from src.main import run_streamlit_messages
 from src.utils.logging_config import setup_logging # API Key loaded from env vars
 
 load_dotenv()
+setup_logging(level=logging.DEBUG)
+
+logger = logging.getLogger(__name__)
+
 # --- Streamlit Page Configuration ---
 st.set_page_config(page_title="Banking Agent Chatbot", page_icon="💰")
+logger.info("Streamlit page configured.")
 
-setup_logging(level=logging.DEBUG)
 
 # --- Main Chat Interface ---
 st.title("💰 Banking Agent Chatbot")
@@ -43,15 +47,18 @@ with st.expander(label="Ask questions regarding your finance data", expanded=st.
 # Initialize chat messages in session state
 if "messages" not in st.session_state:
     st.session_state["messages"] = [AIMessage(content="How can I help you?")]
+    logger.debug("Initializing chat messages in session state.")
 
 # Initialize chat history
 if "messages" not in st.session_state:
     st.session_state["messages"] = [AIMessage(content="How can I help you today?")]
 if "thread_id" not in st.session_state:
     st.session_state["thread_id"] = f"streamlit_thread_{uuid.uuid4()}" # Unique thread ID per session
+    logger.debug(f"Initializing thread ID in session state: {st.session_state['thread_id']}")
 
 # Loop through all messages in the session state and render them as a chat on every st.refresh mech
 for msg in st.session_state.messages:
+    logger.debug(f"Rendering message of type: {type(msg).__name__}")
     # we store them as AIMessage and HumanMessage as its easier to send to LangGraph
     if isinstance(msg, AIMessage):
         st.chat_message("assistant").write(msg.content)
@@ -62,14 +69,20 @@ for msg in st.session_state.messages:
 
 # Handle user input if provided
 if prompt:
+    logger.info(f"Received user prompt: {prompt[:50]}...") # Log first 50 chars
     st.session_state.messages.append(HumanMessage(content=prompt))
     st.chat_message("user").write(prompt)
 
     with st.chat_message("assistant"):
         # create a new placeholder for streaming messages and other events, and give it context
         st_callback = get_streamlit_cb(st.container())
+        logger.info(f"Calling run_streamlit_messages for thread_id: {st.session_state.thread_id}")
         response = run_streamlit_messages(st.session_state.messages, [st_callback],thread_id=st.session_state.thread_id)
-        st.session_state.messages.append(AIMessage(content=response["messages"][-1].content))   # Add that last message to the st_message_state
+        # The Streamlit callback handler (StreamHandler in st_callable_util.py)
+        # is responsible for displaying the final response and updating the UI.
+        # LangGraph's state management persists messages using the thread_id.
+        # Explicitly appending here is redundant and likely unreachable due to
+        # Streamlit reruns triggered by the callback's UI updates.
 
 
 # # Display chat messages from history on app rerun
