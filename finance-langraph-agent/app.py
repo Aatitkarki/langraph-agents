@@ -78,11 +78,18 @@ if prompt:
         st_callback = get_streamlit_cb(st.container())
         logger.info(f"Calling run_streamlit_messages for thread_id: {st.session_state.thread_id}")
         response = run_streamlit_messages(st.session_state.messages, [st_callback],thread_id=st.session_state.thread_id)
-        # The Streamlit callback handler (StreamHandler in st_callable_util.py)
-        # is responsible for displaying the final response and updating the UI.
-        # LangGraph's state management persists messages using the thread_id.
-        # Explicitly appending here is redundant and likely unreachable due to
-        # Streamlit reruns triggered by the callback's UI updates.
+        last_message = response["messages"][-1]
+        logging.debug(f"Response from run_streamlit_messages: {last_message.content}")
+        current_session_message = st.session_state.messages
+        logging.debug(f"Current session message: {current_session_message}")
+        try:
+            logging.debug(f"Adding AIMessage to session state:")
+            st.session_state.messages.append(last_message)   # Add that last message to the st_message_state
+            logging.debug(f"Added the AIMessage to session state: {last_message.content}") 
+        except Exception as e:
+            logger.error(f"Error adding AIMessage to session state: {e}")
+            st.session_state.messages.append(AIMessage(content="Sorry, I encountered an error. Please try again."))
+        logger.info(f"Received response from run_streamlit_messages. Adding AIMessage to state.")
 
 
 # # Display chat messages from history on app rerun
