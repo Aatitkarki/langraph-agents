@@ -1,5 +1,8 @@
 import os
+import logging
 import json
+
+logger = logging.getLogger(__name__)
 
 # --- Mock Data Loading ---
 # Assumes JSON files are in a './mock_data/' subdirectory relative to the project root
@@ -12,11 +15,11 @@ def load_mock_data(filename: str) -> dict:
         with open(filepath, 'r') as f:
             return json.load(f)
     except FileNotFoundError:
-        print(f"Warning: Mock data file not found: {filepath}. Returning empty data.")
+        logger.warning(f" Mock data file not found: {filepath}. Returning empty data.")
         # Return structure expected by tools if data is missing
         return {"ResponseData": None}
     except json.JSONDecodeError as e:
-        print(f"Warning: Error decoding JSON from {filepath}. Details: {e}. Returning empty data.")
+        logger.warning(f" Error decoding JSON from {filepath}. Details: {e}. Returning empty data.")
         return {"ResponseData": None}
 
 # Load all mock data at the start so it's available for import

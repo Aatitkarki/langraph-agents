@@ -1,34 +1,45 @@
 import logging
 import sys
+from colorlog import ColoredFormatter
 
-def setup_logging(level=logging.INFO):
+def setup_logging(level=logging.DEBUG, package_name="src"):
     """
-    Configures the root logger for the application.
+    Configures logging:
+    - Your package logs at `level` (e.g. DEBUG)
+    - Other libraries log at INFO or above
+    """
+    log_format = "%(log_color)s%(asctime)s [%(levelname)s] [%(name)s] - %(message)s"
+    log_colors = {
+        "DEBUG": "cyan",
+        "INFO": "green",
+        "WARNING": "yellow",
+        "ERROR": "red",
+        "CRITICAL": "bold_red",
+    }
 
-    Args:
-        level: The minimum logging level to output (e.g., logging.INFO, logging.DEBUG).
-    """
-    log_formatter = logging.Formatter(
-        "%(asctime)s [%(levelname)s] [%(name)s] - %(message)s"
+    # Only the time, no date
+    datefmt = "%H:%M:%S"  # Format for hours:minutes:seconds
+
+    formatter = ColoredFormatter(
+        log_format, datefmt=datefmt, reset=True, log_colors=log_colors
     )
-    
-    # Configure the root logger
+
     root_logger = logging.getLogger()
-    root_logger.setLevel(level)
-    
-    # Remove existing handlers to avoid duplicates if called multiple times
-    # (though it should ideally be called only once)
+    root_logger.setLevel(logging.DEBUG)  # Capture all, we'll filter below
+
     if root_logger.hasHandlers():
         root_logger.handlers.clear()
 
-    # Add a console handler
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(log_formatter)
+    console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
 
-    # Optional: Add a file handler
-    # file_handler = logging.FileHandler("app.log")
-    # file_handler.setFormatter(log_formatter)
-    # root_logger.addHandler(file_handler)
+    # Set your package's logger to DEBUG (or whatever level you pass in)
+    logging.getLogger(package_name).setLevel(level)
 
-    logging.info("Logging configured successfully.")
+    # Set all other loggers (propagated to root) to INFO
+    for name in logging.root.manager.loggerDict:
+        if not name.startswith(package_name):
+            logging.getLogger(name).setLevel(logging.CRITICAL)
+
+    logging.getLogger(package_name).info("Logging configured.")

@@ -1,4 +1,3 @@
-
 import traceback
 from typing import Optional
 
@@ -11,7 +10,16 @@ from src.graph.builder import finance_graph
 # Note: LLM configuration (including API key handling) is now in src.utils.llm_config
 # The Streamlit app will handle passing the key if provided via UI.
 
-def run_finance_query(query: str, thread_id: str, openai_api_key: Optional[str] = None): # Key is passed but not directly used here; llm instance uses env/initial config
+def run_streamlit_messages(st_messages, callables,thread_id:str):
+    print("Invoking graph",st_messages)
+    if not isinstance(callables, list):
+        raise TypeError("callables must be a list")
+
+    config = RunnableConfig({"configurable": {"thread_id": thread_id},"callbacks":callables})
+
+    return finance_graph.invoke({"messages": st_messages}, config=config)
+
+def run_single_query(query: str, thread_id: str, openai_api_key: Optional[str] = None): # Key is passed but not directly used here; llm instance uses env/initial config
     """Runs a query through the finance graph and returns the final response string."""
     print(f"\n--- [run_finance_query] START ---")
     print(f"Query: '{query}'")

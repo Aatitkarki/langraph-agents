@@ -1,30 +1,15 @@
+import logging
 import streamlit as st
 import uuid
 # Import the core agent execution function and API key constant from the new structure
-from src.main import run_finance_query
-from src.utils.llm_config import OPENAI_API_KEY # API Key loaded from env vars
+from src.main import run_single_query
+from src.utils.llm_config import OPENAI_API_KEY
+from src.utils.logging_config import setup_logging # API Key loaded from env vars
 
 # --- Streamlit Page Configuration ---
 st.set_page_config(page_title="Banking Agent Chatbot", page_icon="💰")
 
-# --- Sidebar for API Key ---
-with st.sidebar:
-    # Use the OPENAI_API_KEY from src.utils.llm_config (env var) if available, otherwise prompt
-    st.session_state.openai_api_key = st.text_input(
-        "OpenAI API Key",
-        key="chatbot_api_key",
-        type="password",
-        value=OPENAI_API_KEY or "" # Pre-fill if found in env (from src.utils.llm_config)
-    )
-    if not st.session_state.openai_api_key and not OPENAI_API_KEY: # Check against key from src.utils.llm_config
-        st.warning("Please enter your OpenAI API Key to use the chatbot.")
-    elif not st.session_state.openai_api_key and OPENAI_API_KEY: # Check against key from src.utils.llm_config
-         st.session_state.openai_api_key = OPENAI_API_KEY # Use env var (from src.utils.llm_config) if user clears input
-         st.info("Using API Key from environment variables.")
-
-    st.markdown("[Get an OpenAI API key](https://platform.openai.com/account/api-keys)")
-    # Add links relevant to your project if desired
-    # st.markdown("[View the source code](...)")
+setup_logging(level=logging.DEBUG)
 
 # --- Main Chat Interface ---
 st.title("💰 Banking Agent Chatbot")
@@ -54,22 +39,21 @@ if prompt := st.chat_input("What would you like to ask?"):
         st.markdown(prompt)
 
     # Display thinking indicator
+    # with st.chat_message("assistant"):
+    with st.spinner("Thinking..."):
+        # Call the banking agent function
+        try:
+            response = run_single_query(
+                query=prompt,
+                thread_id=st.session_state.thread_id,
+                openai_api_key=st.session_state.openai_api_key # Pass the key
+            )
+            msg_content = response
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+            msg_content = "Sorry, I encountered an error. Please try again."
+
+        # Display assistant response
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            # Call the banking agent function
-            try:
-                response = run_finance_query(
-                    query=prompt,
-                    thread_id=st.session_state.thread_id,
-                    openai_api_key=st.session_state.openai_api_key # Pass the key
-                )
-                msg_content = response
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
-                msg_content = "Sorry, I encountered an error. Please try again."
-
-            # Display assistant response
-            st.markdown(msg_content)
-
-    # Add assistant response to chat history
+        st.markdown(msg_content)
     st.session_state.messages.append({"role": "assistant", "content": msg_content})

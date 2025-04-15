@@ -1,3 +1,4 @@
+import logging
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -8,8 +9,10 @@ from .state import FinancialAgentState
 from .supervisor import create_supervisor_finance
 from .worker import create_worker_node_finance
 
+logger = logging.getLogger(f"{__name__}")
+
 # --- Graph Definition ---
-print("--- Building Finance Agent Graph ---")
+logger.debug("--- Building Finance Agent Graph ---")
 finance_builder = StateGraph(FinancialAgentState)
 
 # 1. Define Nodes
@@ -36,6 +39,4 @@ for name in agent_names:
 # 3. Compile the graph with memory
 memory = InMemorySaver()
 finance_graph = finance_builder.compile(checkpointer=memory)
-print("--- Finance Agent Graph Compiled Successfully! ---")
-
-# The compiled 'finance_graph' can now be imported and used.
+logger.debug("--- Finance Agent Graph Compiled Successfully! ---")
