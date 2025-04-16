@@ -13,25 +13,36 @@ def get_transactions(
     account_number: Annotated[Optional[str], "Optional account number to filter transactions. NOTE: This is currently ignored by the pre-loaded data source."] = None,
     limit: Annotated[Optional[int], "Optional limit on the number of transactions to return."] = None
 ) -> List[Dict]:
-    """
-    Fetches the transaction history for the user from pre-loaded JSON data.
+    """Fetches the transaction history for the user from pre-loaded JSON data.
 
-    This tool retrieves a list of transactions. It can optionally limit the number
-    of transactions returned. The account_number filter is accepted but currently
-    ignored by the underlying pre-loaded data source, which returns all transactions.
+    This tool retrieves a list of transactions from the pre-loaded dataset. The data
+    is sourced from the ResponseData section of the transactions dataset. While it
+    accepts an account_number parameter for future compatibility, this filter is
+    currently ignored by the pre-loaded data source.
 
     Args:
-        account_number: An optional account number string. (Currently ignored).
+        account_number: An optional account number string (currently ignored).
         limit: An optional integer to limit the number of transactions returned.
                If omitted, all available transactions are returned.
 
     Returns:
-        A list of dictionaries, where each dictionary represents a transaction.
-        - On success: Each dictionary includes fields like TransactionDate, Description,
-          Amount, Currency, RunningBalance, etc.
-          Example subset: {'TransactionDate': '2024-07-15T10:30:00', 'Description': 'Grocery Store Purchase', 'Amount': -55.75}
-        - If no transaction data is found: Returns a list containing a single dictionary with an error message.
-          Example: [{'Error': 'No transaction data available.'}]
+        List[Dict]: A list of transaction dictionaries with the following structure:
+            - On success: Each dictionary contains transaction details including:
+                * TransactionDate: ISO 8601 timestamp of transaction
+                * Description: Merchant or transaction description
+                * Amount: Signed amount (negative for debits)
+                * Currency: Transaction currency (e.g., 'QAR')
+                * RunningBalance: Account balance after transaction
+                * TransactionType: Type of transaction (e.g., 'POS', 'Transfer')
+                Example: {'TransactionDate': '2024-07-15T10:30:00', 'Description': 'Grocery Store Purchase', 'Amount': -55.75, 'Currency': 'QAR'}
+            - On error: Returns a list containing a single error dictionary:
+                * Error: Description of the error
+                Example: [{'Error': 'No transaction data available.'}]
+
+    Error Handling:
+        - Returns error dictionary if ResponseData is missing or empty
+        - Logs warnings when account_number filter is ignored
+        - Logs errors when no transaction data is available
     """
     logger.info(f"Tool: get_transactions called (Account: {account_number}, Limit: {limit})")
     # Access the pre-loaded JSON data

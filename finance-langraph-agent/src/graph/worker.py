@@ -8,12 +8,48 @@ from langgraph.types import Command
 # Import the shared state definition
 from .state import FinancialAgentState
 
-def create_worker_node_finance(agent_name: str, agent: Runnable) -> Callable[[FinancialAgentState], Command[Literal["supervisor"]]]:
-    """Creates a worker node that invokes the agent and prepares the output."""
+def create_worker_node_finance(
+    agent_name: str,
+    agent: Runnable
+) -> Callable[[FinancialAgentState], Command[Literal["supervisor"]]]:
+    """Creates a worker node function that executes a financial agent and routes back to supervisor.
+    
+    This factory function generates a LangGraph worker node that:
+    1. Invokes the specified agent with the current state
+    2. Processes the agent's response
+    3. Returns a command to route back to the supervisor
+
+    Args:
+        agent_name (str): Name of the agent (used for logging and message attribution)
+        agent (Runnable): The agent runnable to execute when this worker is activated
+
+    Returns:
+        Callable[[FinancialAgentState], Command[Literal["supervisor"]]]: A worker node function that:
+            - Takes FinancialAgentState as input
+            - Returns a Command directing the workflow back to the supervisor
+    """
 
     logger = logging.getLogger(f"{__name__} {agent_name}")
 
     def worker_node(state: FinancialAgentState) -> Command[Literal["supervisor"]]:
+        """Executes the agent and prepares its output for the workflow.
+        
+        The worker node:
+        1. Invokes the assigned agent with the current state
+        2. Extracts the agent's response message
+        3. Formats the response for the workflow
+        4. Returns a command to route back to supervisor
+
+        Args:
+            state (FinancialAgentState): The current workflow state containing:
+                - messages: The conversation history
+                - other agent-specific state data
+
+        Returns:
+            Command[Literal["supervisor"]]: Always routes back to supervisor with:
+                - The agent's response message
+                - Metadata identifying the responding agent
+        """
         logger.debug(f"---Worker Node: {agent_name} Running---")
         result = agent.invoke(state) # The agent runnable handles its own state/message management
 

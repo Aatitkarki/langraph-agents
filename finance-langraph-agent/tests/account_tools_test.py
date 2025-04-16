@@ -1,4 +1,5 @@
 import sys
+from unittest import mock
 from pathlib import Path
 from typing import List, Dict, Any
 import json # For comparing complex structures
@@ -45,17 +46,16 @@ def compare_results(actual: List[Dict], expected: List[Dict]) -> bool:
 
     if actual_json != expected_json:
         print("Content mismatch after sorting:")
-        # Avoid printing potentially large lists
-        # print(f"  Expected JSON: {expected_json}")
-        # print(f"  Actual JSON:   {actual_json}")
+        print(f"  Expected JSON: {expected_json}")
+        print(f"  Actual JSON:   {actual_json}")
         return False
 
     return True
 
 
-def run_account_test(expected: List[Dict]):
+def run_account_test(expected: List[Dict], test_name: str = "get_account_summary()"):
     """Runs the test case for the get_account_summary tool."""
-    print("Testing: get_account_summary()")
+    print(f"Testing: {test_name}")
     try:
         # get_account_summary takes no arguments
         result = get_account_summary.invoke({})
@@ -93,19 +93,52 @@ def main():
     else:
         expected_accounts = expected_accounts_data # Use the actual account data
 
-
     passed_count = 0
     failed_count = 0
 
-    # Only one main test case: fetch all accounts
-    if run_account_test(expected_accounts):
+    # Test cases
+    # 1. Normal case with accounts data
+    if run_account_test(expected_accounts, "Normal case with accounts data"):
         passed_count += 1
     else:
         failed_count += 1
     print("-" * 20) # Separator
 
+    # 2. Test with None dashboard_data
+    with mock.patch('src.utils.data_loader.dashboard_data', None):
+        if run_account_test([{"Error": "No account summary data available."}], "None dashboard_data"):
+            passed_count += 1
+        else:
+            failed_count += 1
+    print("-" * 20)
+
+    # 3. Test with missing Accounts key
+    with mock.patch('src.utils.data_loader.dashboard_data', {"ResponseData": {}}):
+        if run_account_test([{"Error": "No account summary data available."}], "Missing Accounts key"):
+            passed_count += 1
+        else:
+            failed_count += 1
+    print("-" * 20)
+
+    # 4. Test with malformed account data
+    with mock.patch('src.utils.data_loader.dashboard_data', {
+        "ResponseData": {
+            "Accounts": [
+                {"Invalid": "Data"}  # Missing required fields
+            ]
+        }
+    }):
+        expected = [
+            {"Invalid": "Data"}
+        ]
+        if run_account_test(expected, "Malformed account data"):
+            passed_count += 1
+        else:
+            failed_count += 1
+    print("-" * 20)
+
     print("\n--- Test Summary ---")
-    print(f"Total tests: 1") # Only one test case for now
+    print(f"Total tests: 4")
     print(f"Passed: {passed_count}")
     print(f"Failed: {failed_count}")
     print("--- Test Completed ---")

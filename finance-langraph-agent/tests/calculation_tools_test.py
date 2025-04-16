@@ -52,6 +52,15 @@ def main():
         ("10 / 4", 2.5),
         ("-5 + 2", -3.0),
         ("1.2 * 3.4", 4.08),
+        # Edge cases
+        ("1e3 + 2e2", 1200.0),  # Scientific notation
+        ("1.7976931348623157e+308 / 2", 8.988465674311579e+307),  # Large numbers
+        ("5e-324 * 2", 1e-323),  # Small numbers
+        ("10  +  5", 15.0),  # Extra spaces
+        ("10+\t5", "Error: Invalid expression format."),  # Tab separator
+        ("10\u200B+\u200B5", "Error: Invalid expression format."),  # Unicode whitespace
+        ("１０ + ５", 15.0),  # Fullwidth numbers
+        ("١٠ + ٥", 15.0),  # Arabic numerals
         # Error cases
         ("10 / 0", "Error: Division by zero."),
         ("10 +", "Error: Invalid expression format."),

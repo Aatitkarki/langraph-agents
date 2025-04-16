@@ -1,9 +1,12 @@
+import logging
 from langgraph.prebuilt import create_react_agent
 
 # Import necessary components from other modules
 from src.utils.llm_config import llm
 from src.tools.card_tools import get_cards_details
 from .prompts import finance_agent_system_prompt
+
+logger = logging.getLogger(__name__)
 
 # Define the Credit Card Agent
 card_agent = create_react_agent(
@@ -14,4 +17,4 @@ card_agent = create_react_agent(
     )
 )
 
-print("--- Defined Card Agent ---") # Optional: for confirmation
+logger.debug("--- Defined Card Agent ---") # Optional: for confirmation

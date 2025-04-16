@@ -1,3 +1,4 @@
+import logging
 from langgraph.prebuilt import create_react_agent
 
 # Import necessary components from other modules
@@ -5,6 +6,8 @@ from src.utils.llm_config import llm
 from src.tools.exchange_tools import get_exchange_rates
 from src.tools.calculation_tools import basic_calculator
 from .prompts import finance_agent_system_prompt
+
+logger = logging.getLogger(__name__)
 
 # Define the Exchange Rate & Calculation Agent
 exchange_rate_agent = create_react_agent(
@@ -23,4 +26,4 @@ exchange_rate_agent = create_react_agent(
     )
 )
 
-print("--- Defined Exchange Rate Agent ---") # Optional: for confirmation
+logger.debug("--- Defined Exchange Rate Agent ---") # Optional: for confirmation

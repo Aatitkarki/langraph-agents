@@ -84,7 +84,10 @@ def run_transaction_test(account_number: Optional[str], limit: Optional[int], ex
 def main():
     print("--- Running Transaction Tools Test ---")
 
-    # Fetch the expected full list directly from the loaded data
+    # Save original data for restoration after tests
+    original_data = transactions_data
+
+    # Standard test cases with original data
     all_transactions_data = transactions_data.get("ResponseData", None)
 
     if all_transactions_data is None:
@@ -100,7 +103,6 @@ def main():
         # Calculate expected limited results
         limit_val = 5 # Example limit for testing
         expected_limited = expected_all[:limit_val] if len(expected_all) >= limit_val else expected_all
-
 
     test_cases = [
         # (account_number, limit, expected_output_list)
@@ -119,6 +121,60 @@ def main():
          # Test case 7: Limit = -1 (should return all as per current logic)
         (None, -1, expected_all),
     ]
+
+    # Additional test cases that modify the data
+    additional_test_cases = [
+        # Test with None transactions_data
+        (None, None, None, [{"Error": "No transaction data available."}]),
+        # Test with malformed transaction data
+        ({"ResponseData": [
+            {"TransactionDate": "invalid", "Description": None, "Amount": "NaN"},
+            {"TransactionDate": "2024-01-01", "Description": "Valid", "Amount": 100}
+        ]}, None, None, [
+            {"TransactionDate": "invalid", "Description": None, "Amount": "NaN"},
+            {"TransactionDate": "2024-01-01", "Description": "Valid", "Amount": 100}
+        ]),
+        # Test with large amounts
+        ({"ResponseData": [
+            {"TransactionDate": "2024-01-01", "Description": "Large", "Amount": 1e12}
+        ]}, None, None, [
+            {"TransactionDate": "2024-01-01", "Description": "Large", "Amount": 1e12}
+        ]),
+        # Test with special characters
+        ({"ResponseData": [
+            {"TransactionDate": "2024-01-01", "Description": "日本料理店", "Amount": 500}
+        ]}, None, None, [
+            {"TransactionDate": "2024-01-01", "Description": "日本料理店", "Amount": 500}
+        ]),
+    ]
+
+    passed_count = 0
+    failed_count = 0
+
+    # Run standard test cases
+    for acc_num, lim, expected in test_cases:
+        if run_transaction_test(acc_num, lim, expected):
+            passed_count += 1
+        else:
+            failed_count += 1
+        print("-" * 20) # Separator
+
+    # Run additional test cases that modify the data
+    import src.utils.data_loader
+    for test_data, acc_num, lim, expected in additional_test_cases:
+        try:
+            if test_data is None:
+                src.utils.data_loader.transactions_data = None
+            else:
+                src.utils.data_loader.transactions_data = test_data
+            
+            if run_transaction_test(acc_num, lim, expected):
+                passed_count += 1
+            else:
+                failed_count += 1
+            print("-" * 20) # Separator
+        finally:
+            src.utils.data_loader.transactions_data = original_data
 
     passed_count = 0
     failed_count = 0

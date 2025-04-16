@@ -12,8 +12,28 @@ from .state import FinancialAgentState
 
 logger = logging.getLogger(f"{__name__}")
 
-def create_supervisor_finance(llm: BaseChatModel, members: list[str])-> Callable[..., Command[str]]:
-    """Creates a supervisor node function for routing between financial agents."""
+def create_supervisor_finance(
+    llm: BaseChatModel,
+    members: list[str]
+) -> Callable[[FinancialAgentState], Command[str]]:
+    """Creates a supervisor node function for routing between financial agents.
+    
+    This function generates a LangGraph supervisor node that orchestrates routing between
+    specialized financial agents based on the conversation history and user query.
+    The supervisor uses an LLM to analyze the conversation and determine the next
+    appropriate agent or whether to terminate the workflow.
+
+    Args:
+        llm (BaseChatModel): The language model instance to use for routing decisions.
+        members (list[str]): List of available agent names that can be routed to.
+
+    Returns:
+        Callable[[FinancialAgentState], Command[str]]: A supervisor node function that:
+            - Takes FinancialAgentState as input
+            - Returns a Command directing the workflow to either:
+                * The next agent to handle the request
+                * END if the workflow should terminate
+    """
     options = ["FINISH"] + members
     # system_prompt = (
     #     "You are a financial assistant supervisor. Your job is to understand the user's financial query "
@@ -60,7 +80,23 @@ def create_supervisor_finance(llm: BaseChatModel, members: list[str])-> Callable
     supervisor_chain = llm.with_structured_output(Router, include_raw=False)
 
     def supervisor_node(state: FinancialAgentState) -> Command[str]:
-        """Routes work to the appropriate worker or finishes."""
+        """Routes work to the appropriate worker or finishes the workflow.
+        
+        The supervisor node analyzes the conversation history and current state to:
+        1. Determine if the query has been fully answered
+        2. Identify which specialist agent should handle the next step
+        3. Generate appropriate routing commands
+
+        Args:
+            state (FinancialAgentState): The current workflow state containing:
+                - messages: The conversation history
+                - other agent-specific state data
+
+        Returns:
+            Command[str]: A LangGraph command directing the workflow to either:
+                - Transition to another agent node
+                - Terminate the workflow (END)
+        """
         logger.debug("---Supervisor Running---")
         # Supervisor decides based on the conversation history
         # # Filter out tool messages for brevity if needed for the supervisor LLM call
@@ -90,7 +126,7 @@ def create_supervisor_finance(llm: BaseChatModel, members: list[str])-> Callable
                 else:
                      next_worker = "FINISH"
             except Exception:
-                 print("Error: Could not determine next worker or message from supervisor response.")
+                 logger.error("Could not determine next worker or message from supervisor response.")
                  next_worker = "FINISH" # Default to FINISH on error
 
         logger.info(f"---Supervisor Message/Reasoning: {message}---") # Log the message/reasoning

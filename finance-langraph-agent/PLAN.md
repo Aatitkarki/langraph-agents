@@ -1,31 +1,47 @@
-# Plan to Modify Supervisor for State Summary
+# Project Analysis and Improvement Plan
 
-**Objective:** Update the supervisor node in `src/graph/supervisor.py` to include a brief summary of the current state or reasoning before routing to the next agent or finishing.
+This document outlines the steps to analyze and improve the finance-langraph-agent project.
 
-**Steps:**
+## Phase 1: Analysis & Planning
 
-1.  **Modify the `Router` Pydantic Model:**
+1.  **Architecture Analysis (Delegated to Architect Mode):**
 
-    - Add a new string field named `summary` to the `Router` model (defined around line 53). This field will store the summary provided by the LLM.
+    - Analyze the current project structure (`src/`, `app.py`, `tests/`, etc.).
+    - Evaluate the LangGraph implementation (`src/graph/`).
+    - Identify architectural bottlenecks, potential improvements, and adherence to best practices.
+    - Document findings and recommendations.
 
-2.  **Update the `system_prompt`:**
+2.  **Prompt Analysis (Delegated to Code Mode):**
 
-    - Revise the system prompt (lines 32-50), specifically the "Output Format" section (line 49).
-    - Instruct the LLM to output _both_ the `next` agent name (or 'FINISH') _and_ a brief `summary` explaining the state or routing decision, conforming to the updated `Router` model.
+    - Review prompts defined in `src/agents/prompts.py`.
+    - Assess clarity, effectiveness, and potential for prompt injection or ambiguity.
+    - Suggest and potentially implement improvements to the prompts.
+    - Document findings and changes.
 
-3.  **Update the `supervisor_node` Function:**
-    - In the `supervisor_node` function (lines 61-96):
-      - Extract both the `next` worker and the new `summary` field from the LLM's structured response (after line 71).
-      - Add an `logger.info` statement to log the extracted `summary` before the existing routing decision log (around line 86).
-      - Keep the existing routing logic based on the `next` worker value.
+3.  **Code Quality Analysis (Delegated to Code Mode):**
+    - Analyze core application logic (`app.py`, `src/main.py`, `src/agents/`, `src/tools/`, `src/utils/`).
+    - Check for code smells, potential bugs, inefficiencies, and adherence to `CODING_STANDARDS.md`.
+    - Review test coverage in `tests/`.
+    - Suggest and potentially implement refactoring and improvements.
+    - Document findings and changes.
 
-**Conceptual Flow Diagram:**
+## Phase 2: Implementation & Integration
 
-```mermaid
-graph TD
-    A[Start] --> B(Supervisor Node);
-    B -- State --> C{LLM Call};
-    C -- Response (next, summary) --> B;
-    B -- Log Summary --> B;
-    B -- Route based on 'next' --> D[Agent Node or END];
-```
+4.  **Implement Recommendations (Delegated to Code Mode):**
+    - Based on the analysis phases, implement the approved architectural, prompt, and code quality improvements. This might be broken into smaller subtasks.
+    - Ensure changes are integrated smoothly and tests pass.
+
+## Phase 3: Verification
+
+5.  **Testing and Verification (Manual/Automated):**
+    - Run existing tests.
+    - Perform manual testing if necessary (e.g., using `app_cli.py` or `streamlit_app.py`).
+    - Verify the application functions as expected with the improvements.
+
+## Phase 4: Final Report
+
+6.  **Summarize Results (BoomerangMode):**
+    - Compile the outcomes from all subtasks.
+    - Provide a final report summarizing the changes and improvements made.
+
+_(This plan will be executed sequentially by delegating tasks to appropriate modes.)_

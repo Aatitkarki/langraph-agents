@@ -1,9 +1,12 @@
+import logging
 from langgraph.prebuilt import create_react_agent
 
 # Import necessary components from other modules
 from src.utils.llm_config import llm
 from src.tools.transaction_tools import get_transactions
 from .prompts import finance_agent_system_prompt
+
+logger = logging.getLogger(__name__)
 
 # Define the Transaction History Agent
 transaction_agent = create_react_agent(
@@ -14,4 +17,4 @@ transaction_agent = create_react_agent(
     )
 )
 
-print("--- Defined Transaction Agent ---") # Optional: for confirmation
+logger.debug("--- Defined Transaction Agent ---") # Optional: for confirmation

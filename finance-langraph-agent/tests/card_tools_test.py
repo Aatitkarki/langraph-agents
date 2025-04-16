@@ -1,4 +1,5 @@
 import sys
+import unittest.mock
 from pathlib import Path
 from typing import List, Dict, Any
 import json # For comparing complex structures
@@ -54,9 +55,9 @@ def compare_results(actual: List[Dict], expected: List[Dict]) -> bool:
     return True
 
 
-def run_card_test(expected: List[Dict]):
+def run_card_test(expected: List[Dict], test_name: str = "get_cards_details()"):
     """Runs the test case for the get_cards_details tool."""
-    print("Testing: get_cards_details()")
+    print(f"Testing: {test_name}")
     try:
         # get_cards_details takes no arguments
         result = get_cards_details.invoke({})
@@ -94,19 +95,63 @@ def main():
     else:
         expected_cards = expected_cards_data # Use the actual card data
 
-
     passed_count = 0
     failed_count = 0
 
-    # Only one main test case: fetch all cards
-    if run_card_test(expected_cards):
+    # Test cases
+    # 1. Normal case with cards data
+    if run_card_test(expected_cards, "Normal case with cards data"):
         passed_count += 1
     else:
         failed_count += 1
     print("-" * 20) # Separator
 
+    # 2. Test with None dashboard_data (mock this)
+    original_data = dashboard_data
+    try:
+        import src.utils.data_loader
+        src.utils.data_loader.dashboard_data = None
+        if run_card_test([{"Error": "No card data available."}], "None dashboard_data"):
+            passed_count += 1
+        else:
+            failed_count += 1
+    finally:
+        src.utils.data_loader.dashboard_data = original_data
+    print("-" * 20)
+
+    # 3. Test with missing Cards key
+    try:
+        src.utils.data_loader.dashboard_data = {"ResponseData": {}}
+        if run_card_test([{"Error": "No card data available."}], "Missing Cards key"):
+            passed_count += 1
+        else:
+            failed_count += 1
+    finally:
+        src.utils.data_loader.dashboard_data = original_data
+    print("-" * 20)
+
+    # 4. Test with malformed card data
+    malformed_data = {
+        "ResponseData": {
+            "Cards": [
+                {"Invalid": "Data"},  # Missing required fields
+                {"CardNo": "1234", "NameOnCard": None}  # Invalid type
+            ]
+        }
+    }
+    with unittest.mock.patch('src.utils.data_loader.dashboard_data', malformed_data):
+        expected = [
+            {"Invalid": "Data"},
+            {"CardNo": "1234", "NameOnCard": None}
+        ]
+        if run_card_test(expected, "Malformed card data"):
+            passed_count += 1
+        else:
+            failed_count += 1
+    print("-" * 20)
+
     print("\n--- Test Summary ---")
-    print(f"Total tests: 1") # Only one test case for now
+    print(f"Total tests: 4")
     print(f"Passed: {passed_count}")
     print(f"Failed: {failed_count}")
     print("--- Test Completed ---")

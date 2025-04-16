@@ -75,6 +75,8 @@ def main():
     eur_rate = next((r for r in all_rates_expected if r.get("Code") == "EUR"), {"Code": "EUR", "Error": "Rate not found"})
     gbp_rate = next((r for r in all_rates_expected if r.get("Code") == "GBP"), {"Code": "GBP", "Error": "Rate not found"})
 
+    # Save original data for restoration after tests
+    original_data = exchange_rates_data
 
     test_cases = [
         # (input_codes, expected_output_list)
@@ -94,6 +96,48 @@ def main():
         # Duplicate codes (should return only one instance)
         (["USD", "USD"], [usd_rate]),
     ]
+
+    # Additional test cases that modify the data
+    additional_test_cases = [
+        # Test with None exchange_rates_data
+        (None, ["USD"], [{"Error": "Exchange rate data not available."}]),
+        # Test with empty ResponseData list
+        ({"ResponseData": []}, ["USD"], [{"Error": "Exchange rate data not available."}]),
+        # Test with malformed rate data
+        ({"ResponseData": [{"Code": "USD", "Name": None, "Rate": "invalid"}]}, ["USD"], [{"Code": "USD", "Name": None, "Rate": "invalid"}]),
+        # Test with large rate value
+        ({"ResponseData": [{"Code": "BTC", "Name": "Bitcoin", "Rate": 1e6}]}, ["BTC"], [{"Code": "BTC", "Name": "Bitcoin", "Rate": 1e6}]),
+        # Test with special characters
+        ({"ResponseData": [{"Code": "JPY", "Name": "日本円", "Rate": 0.03}]}, ["JPY"], [{"Code": "JPY", "Name": "日本円", "Rate": 0.03}]),
+    ]
+
+    passed_count = 0
+    failed_count = 0
+
+    # Run standard test cases
+    for codes, expected in test_cases:
+        if run_test(codes, expected):
+            passed_count += 1
+        else:
+            failed_count += 1
+        print("-" * 20) # Separator
+
+    # Run additional test cases that modify the data
+    import src.utils.data_loader
+    for test_data, codes, expected in additional_test_cases:
+        try:
+            if test_data is None:
+                src.utils.data_loader.exchange_rates_data = None
+            else:
+                src.utils.data_loader.exchange_rates_data = test_data
+            
+            if run_test(codes, expected):
+                passed_count += 1
+            else:
+                failed_count += 1
+            print("-" * 20) # Separator
+        finally:
+            src.utils.data_loader.exchange_rates_data = original_data
 
     passed_count = 0
     failed_count = 0

@@ -10,11 +10,11 @@ logger = logging.getLogger(__name__)
 
 @tool
 def get_exchange_rates(currency_codes: Annotated[Optional[List[str]], "Optional list of currency codes (e.g., ['USD', 'EUR']) to retrieve rates for."]) -> List[Dict]:
-    """
-    Fetches foreign exchange (FX) rates relative to Qatari Riyal (QAR).
+    """Fetches foreign exchange (FX) rates relative to Qatari Riyal (QAR).
 
-    This tool retrieves how many QAR are equivalent to one unit of a specified foreign currency,
-    using pre-loaded exchange rate data.
+    This tool retrieves exchange rates from pre-loaded data showing how many QAR
+    are equivalent to one unit of specified foreign currencies. Rates are sourced
+    from the ResponseData section of the exchange rates dataset.
 
     Args:
         currency_codes: An optional list of 3-letter ISO currency codes (e.g., ['USD', 'EUR']).
@@ -22,11 +22,24 @@ def get_exchange_rates(currency_codes: Annotated[Optional[List[str]], "Optional 
                         If omitted or an empty list is passed, fetches rates for all available currencies.
 
     Returns:
-        A list of dictionaries, where each dictionary contains the exchange rate information for one currency.
-        - On success: {'Code': str, 'Name': str, 'Rate': float}
-          Example: {'Code': 'USD', 'Name': 'US Dollar', 'Rate': 3.65} signifies that 1 US Dollar equals 3.65 Qatari Riyal.
-        - If a requested code is not found: {'Code': str, 'Error': 'Rate not found'}
-          Example: {'Code': 'XYZ', 'Error': 'Rate not found'}
+        List[Dict]: A list of rate dictionaries with the following structure:
+            - On success: Each dictionary contains:
+                * Code: 3-letter ISO currency code (e.g., 'USD')
+                * Name: Full currency name (e.g., 'US Dollar')
+                * Rate: Exchange rate (1 foreign currency = X QAR)
+                Example: {'Code': 'USD', 'Name': 'US Dollar', 'Rate': 3.65}
+            - On partial success: For requested but unfound codes:
+                * Code: The requested currency code
+                * Error: 'Rate not found' message
+                Example: {'Code': 'XYZ', 'Error': 'Rate not found'}
+            - On complete failure: Returns a list with one error dictionary:
+                * Error: Description of the error
+                Example: [{'Error': 'Exchange rate data not available.'}]
+
+    Error Handling:
+        - Returns error dictionary if ResponseData is missing
+        - Handles case-insensitive currency code matching
+        - Logs all requests and responses
     """
     logger.info(f"Tool: get_exchange_rates called (Codes: {currency_codes})")
     # Access the pre-loaded JSON data
