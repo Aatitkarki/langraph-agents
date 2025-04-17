@@ -81,10 +81,10 @@ async def stream_streamlit_messages(st_messages, st_placeholder , thread_id: str
     except Exception as e:
         logger.error("--- [run_streamlit_messages] ERROR during graph streaming: %s ---", e)
         logger.exception("Exception during graph streaming:")
-        # TODO: Integrate with Streamlit error display callback
-        # e.g., callables[0].display_error(f"Error: {e}")
-        # Depending on Streamlit app structure, might need to return error status
-        raise # Re-raise for potential higher-level handling
+        error_message = f"An error occurred during processing: {e}"
+        token_placeholder.error(error_message) # Display error in the chat
+        # Return an error indicator or the message itself
+        return error_message # Indicate error occurred
 
     # Return value might be less relevant if UI is updated directly via callbacks
     # Return None or status, or accumulated content if needed elsewhere
@@ -161,9 +161,16 @@ if prompt:
             st.session_state.messages.append(last_message)   # Add that last message to the st_message_state
             logging.debug(f"Added the AIMessage to session state: {last_message.content}")
         except Exception as e:
-            logger.error(f"Error adding AIMessage to session state: {e}")
-            st.session_state.messages.append(AIMessage(content="Sorry, I encountered an error. Please try again."))
-        logger.info(f"Received response from run_streamlit_messages. Adding AIMessage to state.")
+            logger.error(f"Error processing response or adding AIMessage to session state: {e}")
+            # If response itself indicated an error, don't add another generic one
+            if not response or not response.startswith("An error occurred"):
+                 st.session_state.messages.append(AIMessage(content=f"Sorry, I encountered an error processing the response: {e}"))
+            # If response already contains the error from stream_streamlit_messages, it might have been added already or was the return value
+            elif response and response not in [msg.content for msg in st.session_state.messages]:
+                 st.session_state.messages.append(AIMessage(content=response)) # Add the error message from streaming
+        # Only log success if no exception occurred
+        else:
+            logger.info(f"Received response from run_streamlit_messages. Adding AIMessage to state.")
 
 
 # # Display chat messages from history on app rerun

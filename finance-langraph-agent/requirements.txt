@@ -4,8 +4,11 @@ langchain-postgres
 langchain-openai
 python-dotenv
 typing-extensions
-psycopg2-binary
+# psycopg[binary]
+# psycopg2-binary
+# psycopg3
 colorlog
 streamlit
 langgraph-checkpoint-sqlite
+langchain-community
 pypdf # Added for PDF loading
