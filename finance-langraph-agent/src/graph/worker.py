@@ -5,13 +5,14 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import Runnable
 
 from langgraph.types import Command
+from langgraph.graph import END
 # Import the shared state definition
 from .state import FinancialAgentState
 
 def create_worker_node_finance(
     agent_name: str,
     agent: Runnable
-) -> Callable[[FinancialAgentState], dict]: # Changed return type from Command to dict
+) -> Callable[[FinancialAgentState], Command[str]]: # type: ignore # Changed return type from Command to dict
     """Creates a worker node function that executes a financial agent and routes back to supervisor.
     
     This factory function generates a LangGraph worker node that:
@@ -31,7 +32,7 @@ def create_worker_node_finance(
 
     logger = logging.getLogger(f"{__name__} {agent_name}")
 
-    def worker_node(state: FinancialAgentState) -> dict: # Changed return type from Command to dict
+    def worker_node(state: FinancialAgentState) -> Command[str]: # type: ignore # Changed return type from Command to dict
         """Executes the agent and prepares its output for the workflow.
         
         The worker node:
@@ -57,10 +58,12 @@ def create_worker_node_finance(
         last_agent_message = result["messages"][-1]
         logger.debug(f"Worker agent message: {last_agent_message}")
         # Return the state update dictionary. The graph structure handles routing back.
-        return {
+        return Command(
+            update={
             "messages": [
                 AIMessage(content=last_agent_message.content, name=agent_name)
-            ]
-        }
-
+            ],       
+            },
+            goto="supervisor",
+        )
     return worker_node

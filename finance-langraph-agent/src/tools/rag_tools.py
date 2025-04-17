@@ -38,7 +38,7 @@ else:
 try:
     if EMBEDDING_MODEL:
         vector_store = PGVector(
-            connection_string=DB_CONNECTION_STRING,
+            connection=DB_CONNECTION_STRING,
             embeddings=EMBEDDING_MODEL, # Corrected parameter name
             collection_name=COLLECTION_NAME,
             # distance_strategy=DistanceStrategy.COSINE, # Default

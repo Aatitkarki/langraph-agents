@@ -1,5 +1,6 @@
 import logging
 import traceback
+import streamlit as st
 from typing import Optional
 
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
@@ -13,7 +14,77 @@ from src.graph.builder import finance_graph
 
 logger = logging.getLogger(__name__)
 
-async def run_streamlit_messages(st_messages, callables, thread_id: str): # Changed to async def
+async def stream_streamlit_messages(st_messages, st_placeholder , thread_id: str) -> str:
+    """Runs messages through the graph using streaming events."""
+    logger.info("Streaming graph with messages: %s for thread: %s", st_messages, thread_id)
+
+    container = st_placeholder  # This container will hold the dynamic Streamlit UI components
+    thoughts_placeholder = container.container()  # Container for displaying status messages
+    token_placeholder = container.empty()  # Placeholder for displaying progressive token updates
+    final_text = "" 
+
+    config = RunnableConfig({"configurable": {"thread_id": thread_id}})
+
+    try:
+        logger.info("--- [run_streamlit_messages] Starting astream_events... ---")
+        async for event in finance_graph.astream_events(
+            {"messages": st_messages}, config=config, version="v2" # Specify event version
+        ):
+            kind = event["event"]
+
+            # --- Handle specific event types for Streamlit ---
+            # This logic needs to be tightly coupled with how the Streamlit app
+            # expects to receive updates (likely via the 'callables').
+
+            if kind == "on_chat_model_stream":
+                logger.debug(f"The event kind is {kind}")
+                # The event corresponding to a stream of new content (tokens or chunks of text)
+                addition = event["data"]["chunk"].content  # type: ignore # Extract the new content chunk
+                final_text += addition  # Append the new content to the accumulated text
+                if addition:
+                    token_placeholder.write(final_text)  # Update the st placeholder with the progressive response
+
+            elif kind == "on_tool_start":
+                logger.debug(f"Tool Event Started : {event}") # Verbose logging
+                # The event signals that a tool is about to be called
+                with thoughts_placeholder:
+                    status_placeholder = st.empty()  # Placeholder to show the tool's status
+                    with status_placeholder.status("Calling Tool...", expanded=True) as s:
+                        st.write("Called ", event['name'])  # Show which tool is being called
+                        st.write("Tool input: ")
+                        st.code(event['data'].get('input'))  # Display the input data sent to the tool
+                        st.write("Tool output: ")
+                        output_placeholder = st.empty()  # Placeholder for tool output that will be updated later below
+                        s.update(label="Completed Calling Tool!", expanded=False)  # Update the status once done
+
+            elif kind == "on_tool_end":
+                logger.debug(f"Tool Event Ended : {event}") # Verbose logging
+                # The event signals that a tool is about to be called
+                # The event signals the completion of a tool's execution
+                with thoughts_placeholder:
+                    # We assume that `on_tool_end` comes after `on_tool_start`, meaning output_placeholder exists
+                    if 'output_placeholder' in locals():
+                        output_placeholder.code(event['data'].get('output').content)  # type: ignore # Display the tool's output
+
+                # Add more event handlers (on_node_start, on_node_end, etc.) if needed for UI feedback
+
+        logger.info("--- [run_streamlit_messages] Streaming finished. ---")
+        return final_text
+
+    except Exception as e:
+        logger.error("--- [run_streamlit_messages] ERROR during graph streaming: %s ---", e)
+        logger.exception("Exception during graph streaming:")
+        # TODO: Integrate with Streamlit error display callback
+        # e.g., callables[0].display_error(f"Error: {e}")
+        # Depending on Streamlit app structure, might need to return error status
+        raise # Re-raise for potential higher-level handling
+
+    # Return value might be less relevant if UI is updated directly via callbacks
+    # Return None or status, or accumulated content if needed elsewhere
+    return final_text # Return the accumulated text
+
+
+async def run_streamlit_messages(st_messages, callables, thread_id: str) -> str:
     """Runs messages through the graph using streaming events."""
     logger.info("Streaming graph with messages: %s for thread: %s", st_messages, thread_id)
     if not isinstance(callables, list):
@@ -22,7 +93,7 @@ async def run_streamlit_messages(st_messages, callables, thread_id: str): # Chan
         # Decide how to handle this - raise error or proceed without callbacks?
         # For now, let's proceed but log warning.
         # raise TypeError("callables must be a list")
-
+    
     config = RunnableConfig({"configurable": {"thread_id": thread_id}, "callbacks": callables})
     final_response_content = "" # Optional: Accumulate final response if needed
 
@@ -67,6 +138,7 @@ async def run_streamlit_messages(st_messages, callables, thread_id: str): # Chan
             # Add more event handlers (on_node_start, on_node_end, etc.) if needed for UI feedback
 
         logger.info("--- [run_streamlit_messages] Streaming finished. ---")
+        return final_response_content;
 
     except Exception as e:
         logger.error("--- [run_streamlit_messages] ERROR during graph streaming: %s ---", e)

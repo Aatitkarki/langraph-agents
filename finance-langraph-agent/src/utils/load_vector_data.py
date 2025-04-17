@@ -76,8 +76,8 @@ def setup_vector_store():
     logger.info(f"Initializing vector store. Connection: {DB_CONNECTION_STRING.split('@')[-1]}, Collection: {COLLECTION_NAME}") # Avoid logging password
     try:
         store = PGVector(
-            connection_string=DB_CONNECTION_STRING,
-            embeddings=EMBEDDING_MODEL,  # Corrected parameter name
+            connection=DB_CONNECTION_STRING, # Changed parameter name from connection_string
+            embeddings=EMBEDDING_MODEL,
             collection_name=COLLECTION_NAME,
             # distance_strategy=DistanceStrategy.COSINE, # Default is COSINE
             pre_delete_collection=False # Set to True to clear collection before adding new docs
