@@ -8,3 +8,4 @@ psycopg2-binary
 colorlog
 streamlit
 langgraph-checkpoint-sqlite
+pypdf # Added for PDF loading

@@ -1,8 +1,10 @@
 import os
 import logging
 from dotenv import load_dotenv
+import tempfile # For handling uploaded files potentially
 
-from langchain_community.document_loaders import TextLoader # Using TextLoader for simplicity, can adapt later
+# Document Loaders
+from langchain_community.document_loaders import TextLoader, PyPDFLoader # Added PyPDFLoader
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres.vectorstores import PGVector
@@ -75,7 +77,7 @@ def setup_vector_store():
     try:
         store = PGVector(
             connection_string=DB_CONNECTION_STRING,
-            embedding_function=EMBEDDING_MODEL,
+            embeddings=EMBEDDING_MODEL,  # Corrected parameter name
             collection_name=COLLECTION_NAME,
             # distance_strategy=DistanceStrategy.COSINE, # Default is COSINE
             pre_delete_collection=False # Set to True to clear collection before adding new docs
@@ -117,14 +119,64 @@ def load_data_to_vector_store(store: PGVector, documents: list[Document]):
         logger.error(f"Failed to add documents to vector store: {e}", exc_info=True)
         raise
 
-if __name__ == "__main__":
-    logger.info("--- Starting Vector Data Loading Script ---")
+def load_pdf_to_vector_store(store: PGVector, pdf_path: str):
+    """Loads a PDF file, splits it, generates embeddings, and adds to the vector store."""
+    if not os.path.exists(pdf_path):
+        logger.error(f"PDF file not found at path: {pdf_path}")
+        return False # Indicate failure
+
+    logger.info(f"Loading PDF document from: {pdf_path}")
     try:
-        vector_store = setup_vector_store()
-        # In a real application, load documents from your actual data source here
-        logger.info("Loading sample FAQ data...")
-        load_data_to_vector_store(vector_store, sample_docs)
-        logger.info("--- Vector Data Loading Script Finished ---")
+        loader = PyPDFLoader(pdf_path)
+        documents = loader.load() # Loads and splits pages into Documents
+        if not documents:
+            logger.warning(f"No content loaded from PDF: {pdf_path}")
+            return False # Indicate failure
+
+        logger.info(f"Loaded {len(documents)} pages from PDF.")
+        # Add metadata about the source file
+        for doc in documents:
+            doc.metadata["source"] = os.path.basename(pdf_path)
+
+        # Use the existing function to split and add
+        load_data_to_vector_store(store, documents)
+        return True # Indicate success
+
     except Exception as e:
-        logger.error(f"An error occurred during the data loading process: {e}", exc_info=True)
-        logger.info("--- Vector Data Loading Script Failed ---")
+        logger.error(f"Failed to load or process PDF {pdf_path}: {e}", exc_info=True)
+        return False # Indicate failure
+
+
+if __name__ == "__main__":
+    # This block is now primarily for testing the loading script directly.
+    # The Streamlit app will call setup_vector_store() and load_pdf_to_vector_store().
+    logger.info("--- Starting Vector Data Loading Script (Manual Test Mode) ---")
+    # Example: Replace with the path to a PDF you want to test loading
+    test_pdf_path = "example_document.pdf" # <--- CHANGE THIS TO A REAL PDF PATH FOR TESTING
+
+    if not os.path.exists(test_pdf_path):
+         logger.warning(f"Test PDF '{test_pdf_path}' not found. Skipping direct load test.")
+         logger.warning("To test loading, place a PDF at that path or update the path.")
+    else:
+        try:
+            vector_store_instance = setup_vector_store()
+            logger.info(f"Attempting to load test PDF: {test_pdf_path}")
+            success = load_pdf_to_vector_store(vector_store_instance, test_pdf_path)
+            if success:
+                logger.info("--- Test PDF Loading Finished Successfully ---")
+            else:
+                logger.error("--- Test PDF Loading Failed ---")
+        except Exception as e:
+            logger.error(f"An error occurred during the manual test loading process: {e}", exc_info=True)
+            logger.info("--- Manual Test Loading Script Failed ---")
+
+    # You might still want to load the initial sample data if needed
+    # logger.info("Loading sample FAQ data (if needed)...")
+    # try:
+    #     vector_store_instance = setup_vector_store() # Re-setup or reuse if already done
+    #     load_data_to_vector_store(vector_store_instance, sample_docs)
+    #     logger.info("Sample FAQ data loaded.")
+    # except Exception as e:
+    #     logger.error(f"Failed to load sample FAQ data: {e}")
+
+    logger.info("--- Vector Data Loading Script (Manual Test Mode) Complete ---")
