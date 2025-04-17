@@ -9,8 +9,8 @@ load_dotenv()
 # Load API keys and model details from environment variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "")
-OPENAI_MODEL_NAME = os.getenv("LLAMA3.2", "")
-SUPERVISOR_MODEL_NAME = os.getenv("COGITO8B", "")
+OPENAI_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "")
+SUPERVISOR_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "")
 
 # Instantiate the LLM
 # Ensure API key is provided either via environment or other means (e.g., Streamlit input)
