@@ -1,8 +1,10 @@
 langchain-core
 langgraph
+langchain-postgres
 langchain-openai
 python-dotenv
 typing-extensions
+psycopg2-binary
 colorlog
 streamlit
 langgraph-checkpoint-sqlite

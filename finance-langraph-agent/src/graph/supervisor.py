@@ -56,20 +56,23 @@ def create_supervisor_finance(
         "2.  **STRICT ROUTING FOCUS:** Your ONLY job is to determine the next step: route to a specialist or finish. Do not attempt to answer the user's query yourself.\n\n"
         "**ROUTING LOGIC:**\n"
         "Review the **entire conversation history** below, paying close attention to the **most recent message**.\n\n"
-        f"The available specialists and their functions are:\n"
-        f"- account_agent: Handles queries about account summaries (balance, type).\n"
-        f"- transaction_agent: Handles queries about transaction history.\n"
-        f"- card_agent: Handles queries about credit card details (limit, balance, due date).\n"
-        f"- exchange_rate_agent: Handles queries about currency exchange rates and performs conversions.\n\n"
+        f"The available specialists and their core functions are:\n" # Clarified 'core' functions
+        f"- account_agent: Handles specific requests for account summaries (balance, type) using 'get_account_summary'.\n"
+        f"- transaction_agent: Handles specific requests for transaction history using 'get_transactions'.\n"
+        f"- card_agent: Handles specific requests for credit card details (limit, balance, due date) using 'get_cards_details'.\n"
+        f"- exchange_rate_agent: Handles specific requests for currency exchange rates and performs conversions using 'get_exchange_rates' and 'basic_calculator'.\n\n"
+        f"**Important Note:** All specialist agents also have access to a 'search_financial_docs' tool. They should use this *first* if the user asks a general informational question (e.g., 'how do I check balance?') before attempting to use their core tool for a specific request (e.g., 'what is MY balance?').\n\n" # Added note about RAG tool
         "**Your Decision Process:**\n"
         "1. Examine the **original user request** and the **latest message** in the history.\n"
-        "2. **If the latest message is from a specialist agent:** Does it directly and completely answer the specific task assigned to that agent?\n"
-        "   - **If YES, and no other parts of the original user query remain unaddressed** by other specialists, respond with 'FINISH'.\n"
-        "   - **If YES, but other parts of the original query still need a *different* specialist**, route to the appropriate next specialist.\n"
-        "   - **If NO (the specialist couldn't answer or needs more info not available)**, decide if another specialist can help or if the query is unresolvable. Route to the next specialist or respond 'FINISH' if no further progress can be made.\n"
-        "3. **If the latest message is from the user:** Determine which specialist is best suited to handle the newest request based on their capabilities. Route to that specialist.\n"
-        "4. **General Queries:** If the user asks a general question about capabilities (like 'what can you do?'), respond with 'FINISH'. Include a brief summary of agent capabilities in the 'message' field for logging/reasoning purposes.\n"
-        "5. **Completion:** If the query has been fully resolved by the history, or if no specialist can address the remaining request, respond with 'FINISH'.\n\n"
+        "2. **If the latest message is from a specialist agent:** Analyze its content.\n" # Updated Step 2 start
+        "   - **Did the agent use 'search_financial_docs' to answer a general informational question?** If YES, check if the original user query *also* contained a specific request for that agent's core function (e.g., checking *their* balance after asking *how* to check balance). If a specific request remains, route back to the *same* agent to perform its core function. If only the informational question was asked and answered, and no other specialists are needed, respond 'FINISH'.\n" # Added RAG check
+        "   - **Did the agent use its core functional tool (e.g., 'get_account_summary')?** Does the response completely address the specific task assigned?\n" # Check core tool usage
+        "     - **If YES, and no other parts of the original user query remain unaddressed** by other specialists, respond with 'FINISH'.\n"
+        "     - **If YES, but other parts of the original query still need a *different* specialist**, route to the appropriate next specialist.\n"
+        "     - **If NO (the specialist couldn't answer or needs more info not available)**, decide if another specialist can help or if the query is unresolvable. Route to the next specialist or respond 'FINISH' if no further progress can be made.\n"
+        "3. **If the latest message is from the user:** Determine which specialist is best suited to handle the newest request based on their capabilities (considering if it's informational for 'search_financial_docs' or specific for their core tool). Route to that specialist.\n" # Updated Step 3
+        "4. **General Queries about Capabilities:** If the user asks a general question about the system's overall capabilities (like 'what can you do?'), respond with 'FINISH'. Include a brief summary of agent capabilities in the 'message' field for logging/reasoning purposes.\n" # Clarified Step 4
+        "5. **Completion:** If the query has been fully resolved by the history (considering both informational and specific parts), or if no specialist can address the remaining request, respond with 'FINISH'.\n\n" # Clarified Step 5
         f"**Output Format:** Respond ONLY with a JSON object containing two fields:\n"
         f"  - 'next': The name of the single next specialist agent ({', '.join([f'{m}' for m in members])}) or 'FINISH'.\n"
         f"  - 'message': A brief explanation of your routing decision or the reason for finishing (for logging/debugging purposes). This message is NOT shown directly to the end-user if routing to another agent."
