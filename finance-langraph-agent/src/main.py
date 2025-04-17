@@ -13,16 +13,72 @@ from src.graph.builder import finance_graph
 
 logger = logging.getLogger(__name__)
 
-def run_streamlit_messages(st_messages, callables,thread_id:str):
-    logger.info("Invoking graph with messages: %s", st_messages)
+async def run_streamlit_messages(st_messages, callables, thread_id: str): # Changed to async def
+    """Runs messages through the graph using streaming events."""
+    logger.info("Streaming graph with messages: %s for thread: %s", st_messages, thread_id)
     if not isinstance(callables, list):
-        raise TypeError("callables must be a list")
+        # Assuming callables might be used for UI updates, ensure it's usable
+        logger.warning("Callbacks provided are not a list, UI updates might fail.")
+        # Decide how to handle this - raise error or proceed without callbacks?
+        # For now, let's proceed but log warning.
+        # raise TypeError("callables must be a list")
 
-    config = RunnableConfig({"configurable": {"thread_id": thread_id},"callbacks":callables})
+    config = RunnableConfig({"configurable": {"thread_id": thread_id}, "callbacks": callables})
+    final_response_content = "" # Optional: Accumulate final response if needed
 
-    result = finance_graph.invoke({"messages": st_messages}, config=config)
-    logger.info("Graph invocation result: %s", result)
-    return result
+    try:
+        logger.info("--- [run_streamlit_messages] Starting astream_events... ---")
+        async for event in finance_graph.astream_events(
+            {"messages": st_messages}, config=config, version="v1" # Specify event version
+        ):
+            kind = event["event"]
+            # logger.debug(f"Stream Event: {kind}, Data: {event['data']}") # Verbose logging
+
+            # --- Handle specific event types for Streamlit ---
+            # This logic needs to be tightly coupled with how the Streamlit app
+            # expects to receive updates (likely via the 'callables').
+
+            if kind == "on_chat_model_stream":
+                # Safely access chunk content
+                data = event.get("data", {})
+                chunk = data.get("chunk")
+                content = getattr(chunk, 'content', None) if chunk else None
+
+                if content:
+                    # TODO: Integrate with Streamlit callback/handler in `callables`
+                    # e.g., callables[0].append_token(content)
+                    logger.debug(f"LLM Stream Chunk: {content}")
+                    final_response_content += content # Example accumulation
+
+            elif kind == "on_tool_start":
+                tool_name = event["data"].get("name", "Unknown Tool")
+                logger.info(f"Tool Started: {tool_name}")
+                # TODO: Integrate with Streamlit status update callback
+                # e.g., callables[0].update_status(f"Running tool: {tool_name}...")
+
+            elif kind == "on_tool_end":
+                tool_name = event["data"].get("name", "Unknown Tool")
+                output = event["data"].get("output", "") # Get tool output if available
+                logger.info(f"Tool Ended: {tool_name}")
+                # logger.debug(f"Tool Output: {output}") # Optional: log tool output
+                # TODO: Integrate with Streamlit status update callback
+                # e.g., callables[0].update_status(f"Tool {tool_name} finished.")
+
+            # Add more event handlers (on_node_start, on_node_end, etc.) if needed for UI feedback
+
+        logger.info("--- [run_streamlit_messages] Streaming finished. ---")
+
+    except Exception as e:
+        logger.error("--- [run_streamlit_messages] ERROR during graph streaming: %s ---", e)
+        logger.exception("Exception during graph streaming:")
+        # TODO: Integrate with Streamlit error display callback
+        # e.g., callables[0].display_error(f"Error: {e}")
+        # Depending on Streamlit app structure, might need to return error status
+        raise # Re-raise for potential higher-level handling
+
+    # Return value might be less relevant if UI is updated directly via callbacks
+    # Return None or status, or accumulated content if needed elsewhere
+    return None # Modified: Return None as updates happen via stream/callbacks
 
 def run_single_query(query: str, thread_id: str, openai_api_key: Optional[str] = None): # Key is passed but not directly used here; llm instance uses env/initial config
     """Runs a query through the finance graph and returns the final response string."""

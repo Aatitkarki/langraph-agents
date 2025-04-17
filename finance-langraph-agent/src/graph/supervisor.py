@@ -15,7 +15,7 @@ logger = logging.getLogger(f"{__name__}")
 def create_supervisor_finance(
     llm: BaseChatModel,
     members: list[str]
-) -> Callable[[FinancialAgentState], Command[str]]:
+) -> Callable[[FinancialAgentState], dict]: # Changed return type from Command to dict
     """Creates a supervisor node function for routing between financial agents.
     
     This function generates a LangGraph supervisor node that orchestrates routing between
@@ -28,11 +28,10 @@ def create_supervisor_finance(
         members (list[str]): List of available agent names that can be routed to.
 
     Returns:
-        Callable[[FinancialAgentState], Command[str]]: A supervisor node function that:
+        Callable[[FinancialAgentState], dict]: A supervisor node function that:
             - Takes FinancialAgentState as input
-            - Returns a Command directing the workflow to either:
-                * The next agent to handle the request
-                * END if the workflow should terminate
+            - Returns a dictionary containing state updates, including the 'next'
+              field which determines routing via the conditional edge function.
     """
     options = ["FINISH"] + members
     # system_prompt = (
@@ -79,7 +78,7 @@ def create_supervisor_finance(
 
     supervisor_chain = llm.with_structured_output(Router, include_raw=False)
 
-    def supervisor_node(state: FinancialAgentState) -> Command[str]:
+    def supervisor_node(state: FinancialAgentState) -> dict: # Changed return type from Command to dict
         """Routes work to the appropriate worker or finishes the workflow.
         
         The supervisor node analyzes the conversation history and current state to:
@@ -93,9 +92,9 @@ def create_supervisor_finance(
                 - other agent-specific state data
 
         Returns:
-            Command[str]: A LangGraph command directing the workflow to either:
-                - Transition to another agent node
-                - Terminate the workflow (END)
+            dict: A dictionary containing state updates. The 'next' key in this
+                  dictionary will be used by the conditional edge logic in the
+                  graph builder to determine the next node.
         """
         logger.debug("---Supervisor Running---")
         # Supervisor decides based on the conversation history
@@ -133,15 +132,16 @@ def create_supervisor_finance(
         logger.info(f"---Supervisor Decision: Route to {next_worker}---")
         if next_worker == "FINISH":
             # Add the final message to the state before finishing
-            final_message = AIMessage(content=message)
-            # The message history should remain untouched, preserving the last agent's response.
-            # The supervisor's 'message' is logged for reasoning but not added to the final state.
-            return Command(goto=END, update={"next": None})
+            # Return state update indicating finish. The routing function handles mapping this to END.
+            # The supervisor's 'message' is logged for reasoning, not added to state here.
+            return {"next": "FINISH"}
         else:
             # Ensure the chosen worker is actually in the members list before routing
             if next_worker in members:
-                return Command(goto=next_worker, update={"next": next_worker})
+                 # Return state update indicating the next worker
+                return {"next": next_worker}
             else:
                 logger.warning(f"Error: Supervisor chose invalid worker '{next_worker}'. Defaulting to FINISH.")
-                return Command(goto=END, update={"next": None}) # Go to END if invalid worker chosen
+                 # Return state update indicating finish if worker is invalid
+                return {"next": "FINISH"}
     return supervisor_node

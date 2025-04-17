@@ -11,7 +11,7 @@ from .state import FinancialAgentState
 def create_worker_node_finance(
     agent_name: str,
     agent: Runnable
-) -> Callable[[FinancialAgentState], Command[Literal["supervisor"]]]:
+) -> Callable[[FinancialAgentState], dict]: # Changed return type from Command to dict
     """Creates a worker node function that executes a financial agent and routes back to supervisor.
     
     This factory function generates a LangGraph worker node that:
@@ -24,14 +24,14 @@ def create_worker_node_finance(
         agent (Runnable): The agent runnable to execute when this worker is activated
 
     Returns:
-        Callable[[FinancialAgentState], Command[Literal["supervisor"]]]: A worker node function that:
+        Callable[[FinancialAgentState], dict]: A worker node function that:
             - Takes FinancialAgentState as input
-            - Returns a Command directing the workflow back to the supervisor
+            - Returns a dictionary containing the state updates (e.g., new messages)
     """
 
     logger = logging.getLogger(f"{__name__} {agent_name}")
 
-    def worker_node(state: FinancialAgentState) -> Command[Literal["supervisor"]]:
+    def worker_node(state: FinancialAgentState) -> dict: # Changed return type from Command to dict
         """Executes the agent and prepares its output for the workflow.
         
         The worker node:
@@ -46,9 +46,9 @@ def create_worker_node_finance(
                 - other agent-specific state data
 
         Returns:
-            Command[Literal["supervisor"]]: Always routes back to supervisor with:
-                - The agent's response message
-                - Metadata identifying the responding agent
+            dict: A dictionary containing the state update, typically the agent's
+                  response message to be added to the history. Routing back to
+                  the supervisor is handled by the graph's static edges.
         """
         logger.debug(f"---Worker Node: {agent_name} Running---")
         result = agent.invoke(state) # The agent runnable handles its own state/message management
@@ -56,14 +56,11 @@ def create_worker_node_finance(
         # The result from create_react_agent should contain the final AIMessage in 'messages'
         last_agent_message = result["messages"][-1]
         logger.debug(f"Worker agent message: {last_agent_message}")
-        return Command(
-        update={
+        # Return the state update dictionary. The graph structure handles routing back.
+        return {
             "messages": [
                 AIMessage(content=last_agent_message.content, name=agent_name)
             ]
-        },
-        # We want our workers to ALWAYS "report back" to the supervisor when done
-        goto="supervisor",
-        )
+        }
 
     return worker_node
