@@ -58,11 +58,13 @@ def create_worker_node_finance(
         last_agent_message = result["messages"][-1]
         logger.debug(f"Worker agent message: {last_agent_message}")
         # Return the state update dictionary. The graph structure handles routing back.
+        # Append the new message to the existing messages list
+        updated_messages = state.get("messages", []) + [AIMessage(content=last_agent_message.content, name=agent_name)]
+
+        # Return the state update dictionary. The graph structure handles routing back.
         return Command(
             update={
-            "messages": [
-                AIMessage(content=last_agent_message.content, name=agent_name)
-            ],       
+            "messages": updated_messages,
             },
             goto="supervisor",
         )
