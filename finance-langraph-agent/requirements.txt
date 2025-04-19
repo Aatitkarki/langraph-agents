@@ -12,3 +12,4 @@ streamlit
 langgraph-checkpoint-sqlite
 langchain-community
 pypdf # Added for PDF loading
+faiss-cpu # Added for vector store

@@ -1,6 +1,8 @@
-def finance_agent_system_prompt(task_description: str) -> str:
-    """Creates a standardized system prompt for financial agents with enhanced clarity and security.
-    
+from typing import Optional
+
+def finance_agent_system_prompt(task_description: str, rag_context: Optional[str] = None) -> str:
+    """Creates a standardized system prompt for financial agents, optionally including RAG context.
+
     Changes implemented:
     - Added prompt injection protection
     - Improved response guidance
@@ -23,6 +25,13 @@ def finance_agent_system_prompt(task_description: str) -> str:
         2.  **ERROR REPORTING:** If a tool fails or returns an error, report the specific error message clearly. Do not speculate on the cause or attempt to fix it yourself. Your supervisor will handle error resolution.
         3.  **MISSING INFORMATION:** If you cannot proceed because essential financial information is missing (e.g., needing an account ID for a balance check that wasn't provided), state precisely what information is required for your specific task. Do not ask general clarifying questions.
         4.  **TASK COMPLETION:** Once you have successfully completed your financial task using the available information and tools, clearly state the outcome and provide all relevant resulting details.
+
+        **ADDITIONAL CONTEXT (If Available):**
+        The following information has been retrieved from a knowledge base and might be relevant to your task. Use it to inform your response if applicable, but prioritize your assigned task and tool results.
+        ```context
+        {rag_context if rag_context else "No additional context provided."}
+        ```
+
         Remember, you are one part of a larger system. Focus solely on your task to ensure the overall system's integrity and accuracy.
         """
     )
