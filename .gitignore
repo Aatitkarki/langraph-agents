@@ -4,3 +4,4 @@
 # Environment variables
 .env
 */.env
+.DS_Store
