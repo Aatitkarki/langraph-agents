@@ -1,3 +1,4 @@
+TAVILY_API_KEY="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"
 import asyncio
 import json
 import logging
