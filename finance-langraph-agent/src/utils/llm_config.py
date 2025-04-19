@@ -1,4 +1,5 @@
 import os
+import logging
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
@@ -11,6 +12,13 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "")
 OPENAI_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "")
 SUPERVISOR_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "")
+
+# Log loaded configuration for debugging
+logging.basicConfig(level=logging.INFO)
+logging.info(f"LLM Config - OPENAI_API_KEY Present: {bool(OPENAI_API_KEY)}")
+logging.info(f"LLM Config - OPENAI_API_BASE: '{OPENAI_API_BASE}'")
+logging.info(f"LLM Config - OPENAI_MODEL_NAME: '{OPENAI_MODEL_NAME}'")
+logging.info(f"LLM Config - SUPERVISOR_MODEL_NAME: '{SUPERVISOR_MODEL_NAME}'")
 
 # Instantiate the LLM
 # Ensure API key is provided either via environment or other means (e.g., Streamlit input)
